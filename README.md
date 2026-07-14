@@ -18,7 +18,8 @@ mania/
   artifacts/inprocess/    core net40 loader/plugin binaries and checksums
   reverse/analysis/       curated reverse-engineering notes
   reverse/scripts/        reproducible ILSpy entry point
-  BLOG.md                 end-to-end engineering narrative
+  docs/                    installation and operator documentation
+  BLOG.md                 full research article
 ```
 
 ## Mania
@@ -39,8 +40,10 @@ The current v0.5.0 research build includes:
   mixtures based on recovered mania judgement windows;
 - deterministic synthetic tests and full-map parity scripts.
 
-Start with the [mania module README](mania/README.md), then read the full engineering story in
-[Building a Live osu!mania Agent from Obfuscated Managed Code](mania/BLOG.md).
+Start with the [mania module README](mania/README.md). The
+[installation and usage manual](mania/docs/INSTALLATION_AND_USAGE.md) covers the complete operating
+path, while [Clockwork Fingers](mania/BLOG.md) presents the reverse engineering, runtime design,
+source excerpts, diagrams, and mathematical model as a research article.
 
 ## Repository policy
 

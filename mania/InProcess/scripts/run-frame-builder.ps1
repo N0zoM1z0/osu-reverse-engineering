@@ -9,8 +9,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$artifact = (Resolve-Path -LiteralPath $ArtifactDirectory).Path
-$map = (Resolve-Path -LiteralPath $Beatmap).Path
+$artifact = (Get-Item -LiteralPath $ArtifactDirectory).FullName
+$map = (Get-Item -LiteralPath $Beatmap).FullName
 $executable = Join-Path $artifact 'LocalManiaAuto.FrameBuilderTest.exe'
 
 if ($All) {
