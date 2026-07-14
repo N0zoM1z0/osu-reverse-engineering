@@ -40,6 +40,10 @@ reverse/
   analysis/               curated findings; no full decompiler dump
   scripts/                reproducible ILSpy command
 
+docs/
+  INSTALLATION_AND_USAGE.md
+                           support checks, build/install, controls, logs, troubleshooting
+
 artifacts/inprocess/net40/
   LocalManiaAuto.Loader.dll
   LocalManiaAuto.Plugin.dll
@@ -124,7 +128,9 @@ miss.
 
 ## Install and launch
 
-Close osu! normally before replacing an already loaded plugin. In PowerShell:
+The full [installation and usage manual](docs/INSTALLATION_AND_USAGE.md) documents prerequisites,
+target and artifact hashes, prebuilt and source-build paths, metadata probes, key layouts, every UI
+setting, logs, troubleshooting, updating, and removal. The minimal PowerShell path is:
 
 ```powershell
 .\InProcess\scripts\install.ps1 -OsuDirectory 'C:\Games\osu!'
@@ -140,7 +146,8 @@ launch does not load the plugin. Remove installed loader/plugin files with:
 
 ## Documentation
 
-- [End-to-end engineering blog](BLOG.md)
+- [Installation and usage manual](docs/INSTALLATION_AND_USAGE.md)
+- [Clockwork Fingers: full research article](BLOG.md)
 - [Recovered native Auto algorithm](reverse/analysis/mania-auto.md)
 - [CLR loader and historical replay-list proof](reverse/analysis/inprocess-loader.md)
 - [Normal Player-input live agent](reverse/analysis/live-agent.md)

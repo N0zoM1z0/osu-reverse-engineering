@@ -59,4 +59,7 @@ mix, 125% dense boost, 240 Hz cadence, fatigue off, 1% finger trouble, and a fre
 ```
 
 Generated files go to `artifacts/inprocess/net40/`. See the module-level
-[README](../README.md) for loader/metadata tests, full-map parity, installation, and launch commands.
+[README](../README.md) for the research overview. The dedicated
+[installation and usage manual](../docs/INSTALLATION_AND_USAGE.md) covers target verification,
+artifact checks, loader/metadata probes, installation, key configuration, overlay operation,
+troubleshooting, full-map parity, and removal.
