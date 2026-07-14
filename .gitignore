@@ -1,0 +1,44 @@
+# IDE and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.user
+*.suo
+
+# Build products
+**/bin/
+**/obj/
+*.pdb
+*.cache
+
+# Runtime output
+*.log
+LocalManiaAuto/
+
+# User-owned game content must never enter the repository
+*.osu
+!mania/ManiaAuto/TestData/minimal-4k.osu
+*.osr
+*.osz
+osu!.exe
+osu!*.dll
+
+# Full decompiler output and private research sessions stay local
+mania/reverse/decompiled/
+mania/reverse/notes/
+
+# Publish only the two core binaries built from this repository
+mania/artifacts/**
+!mania/artifacts/inprocess/
+!mania/artifacts/inprocess/net40/
+!mania/artifacts/inprocess/net40/LocalManiaAuto.Loader.dll
+!mania/artifacts/inprocess/net40/LocalManiaAuto.Plugin.dll
+!mania/artifacts/inprocess/net40/SHA256SUMS
+
+# Local extraction and scratch output
+out/
+output/
+extract*/
+scratch/
+tmp/

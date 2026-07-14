@@ -1,0 +1,28 @@
+osu file format v14
+
+[General]
+AudioFilename: none.mp3
+Mode: 3
+
+[Metadata]
+Title:Minimal native Auto test
+Artist:Local
+Creator:Research
+Version:4K
+
+[Difficulty]
+CircleSize:4
+OverallDifficulty:8
+ApproachRate:5
+HPDrainRate:5
+
+[TimingPoints]
+0,500,4,2,0,100,1,0
+
+[HitObjects]
+64,192,100,1,0,0:0:0:0:
+192,192,200,1,0,0:0:0:0:
+320,192,200,1,0,0:0:0:0:
+448,192,300,128,0,500:0:0:0:0:
+64,192,600,128,0,800:0:0:0:0:
+192,192,700,1,0,0:0:0:0:
