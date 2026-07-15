@@ -200,9 +200,23 @@ public static class ViabilityPlanner
 
             constraints[sourceIndex].OutgoingHyperTargetObjectId = targetId;
             constraints[targetIndex].ForcedHyperTargetObjectId = targetId;
-            effectiveWindows[targetIndex] = effectiveWindows[targetIndex].Intersect(Interval.Point(target.X));
-            EnsureNotEmpty(effectiveWindows[targetIndex], constraints[targetIndex],
-                "hyperdash target centre is outside a simultaneous-object window");
+
+            var arrivalTime = Math.Max(constraints[sourceIndex].Time + 1.0,
+                target.Time - HyperArrivalLead);
+            var postArrivalReachable = Interval.Point(target.X);
+            var postArrivalTime = arrivalTime;
+            for (var index = sourceIndex + 1; index <= targetIndex; index++)
+            {
+                if (constraints[index].Time + Epsilon < arrivalTime)
+                    continue;
+                var delta = constraints[index].Time - postArrivalTime;
+                postArrivalReachable = effectiveWindows[index].Intersect(
+                    postArrivalReachable.Expand(DashSpeed * delta));
+                EnsureNotEmpty(postArrivalReachable, constraints[index],
+                    "post-arrival hyperdash departure cannot remain inside object windows");
+                postArrivalTime = constraints[index].Time;
+            }
+            effectiveWindows[targetIndex] = postArrivalReachable;
 
             for (var index = sourceIndex + 1; index <= targetIndex; index++)
             {
@@ -216,22 +230,15 @@ public static class ViabilityPlanner
             }
 
             var sourceWindow = effectiveWindows[sourceIndex];
-            var arrivalTime = Math.Max(constraints[sourceIndex].Time + 1.0,
-                target.Time - HyperArrivalLead);
             var travelDuration = arrivalTime - constraints[sourceIndex].Time;
             for (var index = sourceIndex + 1; index <= targetIndex; index++)
             {
+                if (constraints[index].Time + Epsilon >= arrivalTime)
+                    continue;
                 var amount = Math.Clamp(
                     (constraints[index].Time - constraints[sourceIndex].Time) / travelDuration,
                     0,
                     1);
-                if (amount >= 1 - Epsilon)
-                {
-                    EnsureContains(effectiveWindows[index], target.X, constraints[index],
-                        "hyperdash arrives outside an intermediate-object window");
-                    continue;
-                }
-
                 var sourceWeight = 1 - amount;
                 var requiredSourceWindow = new Interval(
                     (effectiveWindows[index].Min - amount * target.X) / sourceWeight,
@@ -400,10 +407,16 @@ public static class ViabilityPlanner
             var arrivalTime = Math.Max(constraints[sourceIndex].Time + 1.0,
                 target.Time - HyperArrivalLead);
             var travelDuration = arrivalTime - constraints[sourceIndex].Time;
+            var postArrivalIndexes = new List<int>();
             for (var index = sourceIndex + 1;
                  index < constraints.Count && constraints[index].HyperSegmentSourceConstraintIndex == sourceIndex;
                  index++)
             {
+                if (constraints[index].Time + Epsilon >= arrivalTime)
+                {
+                    postArrivalIndexes.Add(index);
+                    continue;
+                }
                 var amount = Math.Clamp(
                     (constraints[index].Time - constraints[sourceIndex].Time) / travelDuration,
                     0,
@@ -412,6 +425,43 @@ public static class ViabilityPlanner
                     + (target.X - positions[sourceIndex]) * amount;
                 EnsureContains(effectiveWindows[index], positions[index], constraints[index],
                     "projected hyperdash trajectory left an object window");
+            }
+
+            if (postArrivalIndexes.Count == 0)
+                throw new InvalidOperationException(
+                    $"Hyperdash segment from {constraints[sourceIndex].Time}ms has no target constraint.");
+
+            var postBackward = new Interval[postArrivalIndexes.Count];
+            var last = postArrivalIndexes.Count - 1;
+            var targetIndex = postArrivalIndexes[last];
+            postBackward[last] = effectiveWindows[targetIndex].Intersect(Interval.Point(positions[targetIndex]));
+            EnsureNotEmpty(postBackward[last], constraints[targetIndex],
+                "selected hyperdash departure target left its reachable window");
+            for (var post = last - 1; post >= 0; post--)
+            {
+                var index = postArrivalIndexes[post];
+                var nextIndex = postArrivalIndexes[post + 1];
+                var delta = constraints[nextIndex].Time - constraints[index].Time;
+                postBackward[post] = effectiveWindows[index].Intersect(
+                    postBackward[post + 1].Expand(DashSpeed * delta));
+                EnsureNotEmpty(postBackward[post], constraints[index],
+                    "post-arrival hyperdash path cannot reach the selected target position");
+            }
+
+            var previousTime = arrivalTime;
+            var previousX = target.X;
+            for (var post = 0; post < postArrivalIndexes.Count; post++)
+            {
+                var index = postArrivalIndexes[post];
+                var delta = constraints[index].Time - previousTime;
+                var available = postBackward[post].Intersect(new Interval(
+                    previousX - DashSpeed * delta,
+                    previousX + DashSpeed * delta));
+                EnsureNotEmpty(available, constraints[index],
+                    "post-arrival hyperdash path is unreachable from the target centre");
+                positions[index] = available.Clamp(constraints[index].PreferredX);
+                previousTime = constraints[index].Time;
+                previousX = positions[index];
             }
         }
     }
@@ -454,78 +504,107 @@ public static class ViabilityPlanner
                 }
                 var source = waypoints[sourceIndex];
                 var target = waypoints[targetIndex];
-                var hyperDisplacement = target.X - source.X;
+                var targetCentre = target.HyperTargetX;
+                var hyperDisplacement = targetCentre - source.X;
                 var hyperDistance = Math.Abs(hyperDisplacement);
+                var travelEnd = Math.Max(source.Time + 1.0, target.Time - HyperArrivalLead);
                 if (hyperDistance <= Epsilon)
                 {
-                    AddPhase(source.Time, target.Time, source.X, target.X, CatchInputState.Idle, 0);
+                    AddPhase(source.Time, travelEnd, source.X, targetCentre, CatchInputState.Idle, 0);
                 }
                 else
                 {
-                    var travelEnd = Math.Max(source.Time + 1.0, target.Time - HyperArrivalLead);
                     AddPhase(
                         source.Time,
                         travelEnd,
                         source.X,
-                        target.X,
+                        targetCentre,
                         hyperDisplacement < 0 ? CatchInputState.HyperDashLeft : CatchInputState.HyperDashRight,
                         hyperDistance / Math.Max(1, travelEnd - source.Time));
-                    AddPhase(travelEnd, target.Time, target.X, target.X, CatchInputState.Idle, 0);
+                }
+
+                var departureTime = travelEnd;
+                var departureX = targetCentre;
+                for (var departureIndex = index; departureIndex <= targetIndex; departureIndex++)
+                {
+                    var departure = waypoints[departureIndex];
+                    if (departure.Time + Epsilon < travelEnd)
+                        continue;
+                    AddOrdinaryPhases(
+                        departureTime,
+                        departure.Time,
+                        departureX,
+                        departure.X);
+                    departureTime = departure.Time;
+                    departureX = departure.X;
                 }
                 index = targetIndex;
                 continue;
             }
-            var duration = current.Time - previous.Time;
-            var displacement = current.X - previous.X;
+            AddOrdinaryPhases(
+                previous.Time,
+                current.Time,
+                previous.X,
+                current.X);
+        }
+        return controls;
+
+        void AddOrdinaryPhases(
+            double startTime,
+            double endTime,
+            double startX,
+            double endX)
+        {
+            var duration = endTime - startTime;
+            var displacement = endX - startX;
             var distance = Math.Abs(displacement);
             if (duration <= Epsilon)
             {
                 if (distance > Epsilon)
-                    throw new InvalidOperationException($"Non-zero movement at equal timestamps ({current.Time}ms).");
-                continue;
+                    throw new InvalidOperationException($"Non-zero movement at equal timestamps ({endTime}ms).");
+                return;
             }
 
             if (distance <= Epsilon)
             {
-                AddPhase(previous.Time, current.Time, previous.X, current.X, CatchInputState.Idle, 0);
-                continue;
+                AddPhase(startTime, endTime, startX, endX, CatchInputState.Idle, 0);
+                return;
             }
 
             var direction = Math.Sign(displacement);
             if (distance <= WalkSpeed * duration + Epsilon)
             {
                 var walkDuration = distance / WalkSpeed;
-                var movementStart = current.Time - walkDuration;
-                AddPhase(previous.Time, movementStart, previous.X, previous.X, CatchInputState.Idle, 0);
+                var movementStart = endTime - walkDuration;
+                AddPhase(startTime, movementStart, startX, startX, CatchInputState.Idle, 0);
                 AddPhase(
                     movementStart,
-                    current.Time,
-                    previous.X,
-                    current.X,
+                    endTime,
+                    startX,
+                    endX,
                     direction < 0 ? CatchInputState.WalkLeft : CatchInputState.WalkRight,
                     WalkSpeed);
-                continue;
+                return;
             }
 
             var dashDuration = Math.Clamp(2 * distance - duration, 0, duration);
             var walkDurationMixed = duration - dashDuration;
-            var afterWalkX = previous.X + direction * WalkSpeed * walkDurationMixed;
+            var afterWalkX = startX + direction * WalkSpeed * walkDurationMixed;
             AddPhase(
-                previous.Time,
-                previous.Time + walkDurationMixed,
-                previous.X,
+                startTime,
+                startTime + walkDurationMixed,
+                startX,
                 afterWalkX,
                 direction < 0 ? CatchInputState.WalkLeft : CatchInputState.WalkRight,
                 WalkSpeed);
             AddPhase(
-                previous.Time + walkDurationMixed,
-                current.Time,
+                startTime + walkDurationMixed,
+                endTime,
                 afterWalkX,
-                current.X,
+                endX,
                 direction < 0 ? CatchInputState.DashLeft : CatchInputState.DashRight,
                 DashSpeed);
         }
-        return controls;
 
         void AddPhase(
             double startTime,

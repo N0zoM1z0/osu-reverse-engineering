@@ -199,7 +199,7 @@ Expected summary:
 
 ```text
 CATCH NET40 PLANNER: PASS
-objects=7, constraints=7, phases=20, hyper=1
+objects=8, constraints=8, phases=20, hyper=1
 ```
 
 ## 8. Use the portable Catch planner
@@ -293,9 +293,9 @@ Expected final line:
 CATCH VERIFICATION: PASS
 ```
 
-The publication corpus contained eight native Catch difficulties. It produced 32 style builds,
-35,168 aggregate constraints, and 6,180 hyper links. Those maps are local test inputs and are not
-part of the repository.
+The current publication corpus contained 29 native Catch difficulties. It produced 116 style
+builds, 112,432 aggregate constraints, and 18,872 hyper links. The tightest map retained 9.25 px
+global clearance. Those maps are local test inputs and are not part of the repository.
 
 ## 10. Run the metadata probe separately
 

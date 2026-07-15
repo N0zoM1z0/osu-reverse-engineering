@@ -431,11 +431,25 @@ namespace LocalCatchAgent.Plugin
                 sourceConstraint.DepartsByHyperDash = true;
                 sourceConstraint.OutgoingHyperTargetId = targetId;
                 constraints[targetIndex].ForcedHyperTargetId = targetId;
-                effectiveWindows[targetIndex] = effectiveWindows[targetIndex].Intersect(CatchInterval.Point(target.X));
-                EnsureNotEmpty(
-                    effectiveWindows[targetIndex],
-                    constraints[targetIndex],
-                    "hyperdash target centre is outside a simultaneous-object window");
+
+                double arrivalTime = Math.Max(sourceConstraint.Time + 1.0,
+                    target.Time - HyperArrivalLead);
+                CatchInterval postArrivalReachable = CatchInterval.Point(target.X);
+                double postArrivalTime = arrivalTime;
+                for (int index = sourceIndex + 1; index <= targetIndex; index++)
+                {
+                    if (constraints[index].Time + Epsilon < arrivalTime)
+                        continue;
+                    double delta = constraints[index].Time - postArrivalTime;
+                    postArrivalReachable = effectiveWindows[index].Intersect(
+                        postArrivalReachable.Expand(DashSpeed * delta));
+                    EnsureNotEmpty(
+                        postArrivalReachable,
+                        constraints[index],
+                        "post-arrival hyperdash departure cannot remain inside object windows");
+                    postArrivalTime = constraints[index].Time;
+                }
+                effectiveWindows[targetIndex] = postArrivalReachable;
 
                 for (int index = sourceIndex + 1; index <= targetIndex; index++)
                 {
@@ -450,20 +464,13 @@ namespace LocalCatchAgent.Plugin
                 }
 
                 CatchInterval sourceWindow = effectiveWindows[sourceIndex];
-                double arrivalTime = Math.Max(sourceConstraint.Time + 1.0,
-                    target.Time - HyperArrivalLead);
                 double travelDuration = arrivalTime - sourceConstraint.Time;
                 for (int index = sourceIndex + 1; index <= targetIndex; index++)
                 {
+                    if (constraints[index].Time + Epsilon >= arrivalTime)
+                        continue;
                     double amount = (constraints[index].Time - sourceConstraint.Time) / travelDuration;
                     amount = Math.Max(0.0, Math.Min(1.0, amount));
-                    if (amount >= 1.0 - Epsilon)
-                    {
-                        EnsureContains(effectiveWindows[index], target.X, constraints[index],
-                            "hyperdash arrives outside an intermediate-object window");
-                        continue;
-                    }
-
                     double sourceWeight = 1.0 - amount;
                     CatchInterval requiredSourceWindow = new CatchInterval(
                         (effectiveWindows[index].Minimum - amount * target.X) / sourceWeight,
@@ -693,11 +700,17 @@ namespace LocalCatchAgent.Plugin
                 double arrivalTime = Math.Max(constraints[sourceIndex].Time + 1.0,
                     target.Time - HyperArrivalLead);
                 double travelDuration = arrivalTime - constraints[sourceIndex].Time;
+                List<int> postArrivalIndexes = new List<int>();
                 for (int index = sourceIndex + 1;
                     index < constraints.Count
                         && constraints[index].HyperSegmentSourceConstraintIndex == sourceIndex;
                     index++)
                 {
+                    if (constraints[index].Time + Epsilon >= arrivalTime)
+                    {
+                        postArrivalIndexes.Add(index);
+                        continue;
+                    }
                     double amount = (constraints[index].Time - constraints[sourceIndex].Time)
                         / travelDuration;
                     amount = Math.Max(0.0, Math.Min(1.0, amount));
@@ -705,6 +718,52 @@ namespace LocalCatchAgent.Plugin
                         + (target.X - positions[sourceIndex]) * amount;
                     EnsureContains(effectiveWindows[index], positions[index], constraints[index],
                         "projected hyperdash trajectory left an object window");
+                }
+
+                if (postArrivalIndexes.Count == 0)
+                {
+                    throw new InvalidOperationException("Hyperdash segment from "
+                        + constraints[sourceIndex].Time + "ms has no target constraint.");
+                }
+
+                CatchInterval[] postBackward = new CatchInterval[postArrivalIndexes.Count];
+                int last = postArrivalIndexes.Count - 1;
+                int targetIndex = postArrivalIndexes[last];
+                postBackward[last] = effectiveWindows[targetIndex].Intersect(
+                    CatchInterval.Point(positions[targetIndex]));
+                EnsureNotEmpty(
+                    postBackward[last],
+                    constraints[targetIndex],
+                    "selected hyperdash departure target left its reachable window");
+                for (int post = last - 1; post >= 0; post--)
+                {
+                    int index = postArrivalIndexes[post];
+                    int nextIndex = postArrivalIndexes[post + 1];
+                    int delta = constraints[nextIndex].Time - constraints[index].Time;
+                    postBackward[post] = effectiveWindows[index].Intersect(
+                        postBackward[post + 1].Expand(DashSpeed * delta));
+                    EnsureNotEmpty(
+                        postBackward[post],
+                        constraints[index],
+                        "post-arrival hyperdash path cannot reach the selected target position");
+                }
+
+                double previousTime = arrivalTime;
+                double previousX = target.X;
+                for (int post = 0; post < postArrivalIndexes.Count; post++)
+                {
+                    int index = postArrivalIndexes[post];
+                    double delta = constraints[index].Time - previousTime;
+                    CatchInterval available = postBackward[post].Intersect(new CatchInterval(
+                        previousX - DashSpeed * delta,
+                        previousX + DashSpeed * delta));
+                    EnsureNotEmpty(
+                        available,
+                        constraints[index],
+                        "post-arrival hyperdash path is unreachable from the target centre");
+                    positions[index] = available.Clamp(constraints[index].PreferredX);
+                    previousTime = constraints[index].Time;
+                    previousX = positions[index];
                 }
             }
         }
@@ -733,80 +792,122 @@ namespace LocalCatchAgent.Plugin
 
                     RuntimeCatchWaypoint source = waypoints[sourceIndex];
                     RuntimeCatchWaypoint target = waypoints[targetIndex];
-                    double hyperDisplacement = target.X - source.X;
+                    double targetCentre = target.HyperTargetX;
+                    double hyperDisplacement = targetCentre - source.X;
                     double hyperDistance = Math.Abs(hyperDisplacement);
+                    double travelEnd = Math.Max(source.Time + 1.0,
+                        target.Time - HyperArrivalLead);
                     if (hyperDistance <= Epsilon)
                     {
-                        AddPhase(controls, source.Time, target.Time, source.X, target.X,
+                        AddPhase(controls, source.Time, travelEnd, source.X, targetCentre,
                             CatchInputIntent.Idle, 0.0);
                     }
                     else
                     {
-                        double travelEnd = Math.Max(source.Time + 1.0,
-                            target.Time - HyperArrivalLead);
-                        AddPhase(controls, source.Time, travelEnd, source.X, target.X,
+                        AddPhase(controls, source.Time, travelEnd, source.X, targetCentre,
                             hyperDisplacement < 0
                                 ? CatchInputIntent.HyperDashLeft
                                 : CatchInputIntent.HyperDashRight,
                             hyperDistance / Math.Max(1.0, travelEnd - source.Time));
-                        AddPhase(controls, travelEnd, target.Time, target.X, target.X,
-                            CatchInputIntent.Idle, 0.0);
+                    }
+
+                    double departureTime = travelEnd;
+                    double departureX = targetCentre;
+                    for (int departureIndex = index;
+                        departureIndex <= targetIndex;
+                        departureIndex++)
+                    {
+                        RuntimeCatchWaypoint departure = waypoints[departureIndex];
+                        if (departure.Time + Epsilon < travelEnd)
+                            continue;
+                        AddOrdinaryPhases(
+                            controls,
+                            departureTime,
+                            departure.Time,
+                            departureX,
+                            departure.X,
+                            style,
+                            departureIndex);
+                        departureTime = departure.Time;
+                        departureX = departure.X;
                     }
                     index = targetIndex;
                     continue;
                 }
 
-                double duration = current.Time - previous.Time;
-                double displacement = current.X - previous.X;
-                double distance = Math.Abs(displacement);
-                if (duration <= Epsilon)
-                {
-                    if (distance > Epsilon)
-                        throw new InvalidOperationException("Non-zero Catch movement at equal timestamps.");
-                    continue;
-                }
-
-                if (distance <= Epsilon)
-                {
-                    AddPhase(controls, previous.Time, current.Time, previous.X, current.X, CatchInputIntent.Idle, 0.0);
-                    continue;
-                }
-                int direction = Math.Sign(displacement);
-                if (distance <= WalkSpeed * duration + Epsilon)
-                {
-                    double walkDuration = distance / WalkSpeed;
-                    double slack = Math.Max(0.0, duration - walkDuration);
-                    double slackBefore;
-                    if (style == CatchPathStyle.LastMoment) slackBefore = slack;
-                    else if (style == CatchPathStyle.Lively) slackBefore = slack * (index % 2 == 0 ? 0.35 : 0.65);
-                    else slackBefore = slack * 0.5;
-                    double movementStart = previous.Time + slackBefore;
-                    AddPhase(controls, previous.Time, movementStart, previous.X, previous.X, CatchInputIntent.Idle, 0.0);
-                    AddPhase(controls, movementStart, movementStart + walkDuration, previous.X, current.X,
-                        DirectionalIntent(direction, false, false), WalkSpeed);
-                    AddPhase(controls, movementStart + walkDuration, current.Time, current.X, current.X,
-                        CatchInputIntent.Idle, 0.0);
-                    continue;
-                }
-
-                double dashDuration = Math.Max(0.0, Math.Min(duration, 2.0 * distance - duration));
-                double walkDurationTotal = duration - dashDuration;
-                double walkBefore;
-                if (style == CatchPathStyle.LastMoment) walkBefore = walkDurationTotal;
-                else if (style == CatchPathStyle.Lively)
-                    walkBefore = walkDurationTotal * (index % 2 == 0 ? 0.30 : 0.70);
-                else walkBefore = walkDurationTotal * 0.5;
-                double walkAfter = walkDurationTotal - walkBefore;
-                double afterFirstWalkX = previous.X + direction * WalkSpeed * walkBefore;
-                double afterDashX = afterFirstWalkX + direction * DashSpeed * dashDuration;
-                AddPhase(controls, previous.Time, previous.Time + walkBefore,
-                    previous.X, afterFirstWalkX, DirectionalIntent(direction, false, false), WalkSpeed);
-                AddPhase(controls, previous.Time + walkBefore, previous.Time + walkBefore + dashDuration,
-                    afterFirstWalkX, afterDashX, DirectionalIntent(direction, true, false), DashSpeed);
-                AddPhase(controls, previous.Time + walkBefore + dashDuration, current.Time,
-                    afterDashX, current.X, DirectionalIntent(direction, false, false), WalkSpeed);
+                AddOrdinaryPhases(
+                    controls,
+                    previous.Time,
+                    current.Time,
+                    previous.X,
+                    current.X,
+                    style,
+                    index);
             }
             return controls;
+        }
+
+        private static void AddOrdinaryPhases(
+            List<RuntimeCatchControlPhase> controls,
+            double startTime,
+            double endTime,
+            double startX,
+            double endX,
+            CatchPathStyle style,
+            int styleIndex)
+        {
+            double duration = endTime - startTime;
+            double displacement = endX - startX;
+            double distance = Math.Abs(displacement);
+            if (duration <= Epsilon)
+            {
+                if (distance > Epsilon)
+                    throw new InvalidOperationException("Non-zero Catch movement at equal timestamps.");
+                return;
+            }
+
+            if (distance <= Epsilon)
+            {
+                AddPhase(controls, startTime, endTime, startX, endX,
+                    CatchInputIntent.Idle, 0.0);
+                return;
+            }
+
+            int direction = Math.Sign(displacement);
+            if (distance <= WalkSpeed * duration + Epsilon)
+            {
+                double walkDuration = distance / WalkSpeed;
+                double slack = Math.Max(0.0, duration - walkDuration);
+                double slackBefore;
+                if (style == CatchPathStyle.LastMoment) slackBefore = slack;
+                else if (style == CatchPathStyle.Lively)
+                    slackBefore = slack * (styleIndex % 2 == 0 ? 0.35 : 0.65);
+                else slackBefore = slack * 0.5;
+                double movementStart = startTime + slackBefore;
+                AddPhase(controls, startTime, movementStart, startX, startX,
+                    CatchInputIntent.Idle, 0.0);
+                AddPhase(controls, movementStart, movementStart + walkDuration, startX, endX,
+                    DirectionalIntent(direction, false, false), WalkSpeed);
+                AddPhase(controls, movementStart + walkDuration, endTime, endX, endX,
+                    CatchInputIntent.Idle, 0.0);
+                return;
+            }
+
+            double dashDuration = Math.Max(0.0, Math.Min(duration, 2.0 * distance - duration));
+            double walkDurationTotal = duration - dashDuration;
+            double walkBefore;
+            if (style == CatchPathStyle.LastMoment) walkBefore = walkDurationTotal;
+            else if (style == CatchPathStyle.Lively)
+                walkBefore = walkDurationTotal * (styleIndex % 2 == 0 ? 0.30 : 0.70);
+            else walkBefore = walkDurationTotal * 0.5;
+            double afterFirstWalkX = startX + direction * WalkSpeed * walkBefore;
+            double afterDashX = afterFirstWalkX + direction * DashSpeed * dashDuration;
+            AddPhase(controls, startTime, startTime + walkBefore,
+                startX, afterFirstWalkX, DirectionalIntent(direction, false, false), WalkSpeed);
+            AddPhase(controls, startTime + walkBefore, startTime + walkBefore + dashDuration,
+                afterFirstWalkX, afterDashX, DirectionalIntent(direction, true, false), DashSpeed);
+            AddPhase(controls, startTime + walkBefore + dashDuration, endTime,
+                afterDashX, endX, DirectionalIntent(direction, false, false), WalkSpeed);
         }
 
         private static void AddPhase(

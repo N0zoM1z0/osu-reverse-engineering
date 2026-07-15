@@ -114,21 +114,38 @@ internal static class SelfTest
             SourceLine = 3,
             SourceObjectIndex = 2
         };
+        var next = new ConvertedCatchObject
+        {
+            Id = 3,
+            Kind = CatchObjectKind.Fruit,
+            Time = 1300,
+            X = 260,
+            SourceLine = 4,
+            SourceObjectIndex = 3
+        };
         var conversion = new CatchConversionResult
         {
             Beatmap = beatmap,
-            Objects = new[] { source, tiny, target },
+            Objects = new[] { source, tiny, target, next },
             CatcherWidth = 100,
             CollisionRadius = 40
         };
 
         var plan = ViabilityPlanner.Build(conversion);
-        Assert(plan.Waypoints.Count == 4, "hyperdash intermediate waypoint count");
+        Assert(plan.Waypoints.Count == 5, "hyperdash intermediate waypoint count");
         Assert(plan.Waypoints[2].ArrivedByHyperDash, "intermediate tiny belongs to hyperdash segment");
-        Assert(plan.Waypoints[^1].ArrivedByHyperDash, "hyperdash relation");
-        Assert(Near(plan.Waypoints[^1].X, 512, 1e-6), "hyperdash exact target");
+        Assert(plan.Waypoints[^2].ArrivedByHyperDash, "hyperdash relation");
+        Assert(plan.Waypoints[^2].X < 512 && plan.Waypoints[^2].X >= 512 - 1000.0 / 60.0 - 1e-6,
+            "hyperdash target did not use its post-arrival departure frame");
+        Assert(Near(
+            ViabilityPlanner.PositionAt(plan.Controls, target.Time - 1000.0 / 60.0),
+            512,
+            1e-6),
+            "hyperdash did not reach target centre one frame early");
         Assert(Math.Abs(ViabilityPlanner.PositionAt(plan.Controls, tiny.Time) - tiny.X) < conversion.CollisionRadius,
             "hyperdash trajectory catches intermediate tiny");
+        Assert(plan.Audit.PredictedFruitMisses == 0,
+            "post-hyper departure lost a required fruit");
         Assert(plan.Controls.Count(phase => phase.Input == CatchInputState.HyperDashRight) == 1,
             "hyperdash segment has one continuous control");
 

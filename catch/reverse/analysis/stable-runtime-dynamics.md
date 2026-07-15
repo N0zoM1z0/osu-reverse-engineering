@@ -129,9 +129,16 @@ h=\frac{|x_t-x_c|}
 $$
 
 The movement update clears that multiplier after crossing the target centre. The active planner
-models this exceptional transition by pinning the successor constraint to `x_t` and exempting the
-source-to-target edge from the ordinary one-pixel-per-millisecond bound. The generated control
-phase holds the appropriate direction and Dash while stable performs the hyper movement.
+therefore pins the **arrival state**, not the later object-time waypoint:
+
+$$
+x(t_t-1000/60)=x_t.
+$$
+
+Between that arrival and `t_t`, ordinary dash movement is available again. The target-time
+waypoint is selected from the intersection of its catch window, the one-frame departure cone, and
+the backward-viable set for following objects. The generated controls hold the hyper direction to
+the centre, then emit an ordinary departure phase when the future route requires one.
 
 This is deliberately smaller than a full frame simulator. It captures the structural invariant
 needed for route construction and leaves actual motion to the client implementation being
@@ -181,8 +188,10 @@ then a forward selection and repeated bidirectional smoothing keep it within the
 and both neighboring movement cones. The four path styles change center, smoothness, playfield,
 and wander weights; none changes hard reachability.
 
-Hyper targets remain fixed. Outgoing hyper sources are kept near their object-centered preference
-to preserve collision headroom for the short input pre-arm.
+Hyper arrival points remain fixed at their runtime target centres. Object-time waypoints may move
+inside the recovered one-frame departure cone. Outgoing hyper sources remain near their
+object-centered preference whenever the surrounding viability constraints allow it, preserving
+collision headroom for the short input pre-arm.
 
 ## Adaptive global margin
 
@@ -256,8 +265,9 @@ The baseline has three layers of repeatable evidence:
 2. exact net40 planner tests and four-style comparison across locally owned native Catch maps; and
 3. live stop telemetry based on the game's own `caught` fields.
 
-At restoration, the corpus produced eight maps, 32 style builds, 35,168 aggregate constraints, and
-6,180 hyper links. The two retained live observations were:
+The expanded publication corpus now produces 29 maps, 116 style builds, 112,432 aggregate
+constraints, and 18,872 hyper links. Every route retained at least 9.25 px measured global
+clearance. The two retained live observations from the rollback baseline remain:
 
 ```text
 The End: F 1259/1259, T 266/266, total 1525/1525
