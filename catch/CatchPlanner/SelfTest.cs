@@ -94,29 +94,43 @@ internal static class SelfTest
             X = 0,
             SourceLine = 1,
             SourceObjectIndex = 0,
-            HyperDashTargetId = 1
+            HyperDashTargetId = 2
+        };
+        var tiny = new ConvertedCatchObject
+        {
+            Id = 1,
+            Kind = CatchObjectKind.TinyDroplet,
+            Time = 1050,
+            X = 300,
+            SourceLine = 2,
+            SourceObjectIndex = 1
         };
         var target = new ConvertedCatchObject
         {
-            Id = 1,
+            Id = 2,
             Kind = CatchObjectKind.Fruit,
             Time = 1100,
             X = 512,
-            SourceLine = 2,
-            SourceObjectIndex = 1
+            SourceLine = 3,
+            SourceObjectIndex = 2
         };
         var conversion = new CatchConversionResult
         {
             Beatmap = beatmap,
-            Objects = new[] { source, target },
+            Objects = new[] { source, tiny, target },
             CatcherWidth = 100,
             CollisionRadius = 40
         };
 
         var plan = ViabilityPlanner.Build(conversion);
+        Assert(plan.Waypoints.Count == 4, "hyperdash intermediate waypoint count");
+        Assert(plan.Waypoints[2].ArrivedByHyperDash, "intermediate tiny belongs to hyperdash segment");
         Assert(plan.Waypoints[^1].ArrivedByHyperDash, "hyperdash relation");
         Assert(Near(plan.Waypoints[^1].X, 512, 1e-6), "hyperdash exact target");
-        Assert(plan.Controls.Any(phase => phase.Input == CatchInputState.HyperDashRight), "hyperdash control");
+        Assert(Math.Abs(ViabilityPlanner.PositionAt(plan.Controls, tiny.Time) - tiny.X) < conversion.CollisionRadius,
+            "hyperdash trajectory catches intermediate tiny");
+        Assert(plan.Controls.Count(phase => phase.Input == CatchInputState.HyperDashRight) == 1,
+            "hyperdash segment has one continuous control");
 
         source.HyperDashTargetId = null;
         var failed = false;

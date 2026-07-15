@@ -75,6 +75,9 @@ namespace LocalCatchAgent.Plugin
         public int[] ObjectIds;
         public bool IsSyntheticStart;
         public int ForcedHyperTargetId = -1;
+        public int HyperSegmentTargetId = -1;
+        public int HyperSegmentSourceConstraintIndex = -1;
+        public int OutgoingHyperTargetId = -1;
         public bool DepartsByHyperDash;
     }
 
@@ -87,6 +90,11 @@ namespace LocalCatchAgent.Plugin
         public bool IsSyntheticStart;
         public bool ArrivedByHyperDash;
         public bool DepartsByHyperDash;
+        public int HyperSegmentSourceConstraintIndex = -1;
+        public int HyperSegmentTargetId = -1;
+        public double HyperTargetX;
+        public int OutgoingHyperTargetId = -1;
+        public double OutgoingHyperTargetX;
         public int[] ObjectIds;
     }
 
@@ -260,6 +268,7 @@ namespace LocalCatchAgent.Plugin
             CatchInterval[] reachable = PropagateForward(constraints, backward);
             double[] positions = SelectFeasibleTrajectory(constraints, backward, reachable);
             SmoothTrajectory(constraints, reachable, positions, options);
+            ProjectHyperDashSegments(constraints, byId, effectiveWindows, positions);
             VerifyTrajectory(constraints, effectiveWindows, positions);
 
             List<RuntimeCatchWaypoint> waypoints = new List<RuntimeCatchWaypoint>(constraints.Count);
@@ -272,8 +281,15 @@ namespace LocalCatchAgent.Plugin
                 waypoint.ViableWindow = reachable[index];
                 waypoint.ObjectWindow = constraint.ObjectWindow;
                 waypoint.IsSyntheticStart = constraint.IsSyntheticStart;
-                waypoint.ArrivedByHyperDash = constraint.ForcedHyperTargetId >= 0;
+                waypoint.ArrivedByHyperDash = constraint.HyperSegmentTargetId >= 0;
                 waypoint.DepartsByHyperDash = constraint.DepartsByHyperDash;
+                waypoint.HyperSegmentSourceConstraintIndex = constraint.HyperSegmentSourceConstraintIndex;
+                waypoint.HyperSegmentTargetId = constraint.HyperSegmentTargetId;
+                if (constraint.HyperSegmentTargetId >= 0)
+                    waypoint.HyperTargetX = byId[constraint.HyperSegmentTargetId].X;
+                waypoint.OutgoingHyperTargetId = constraint.OutgoingHyperTargetId;
+                if (constraint.OutgoingHyperTargetId >= 0)
+                    waypoint.OutgoingHyperTargetX = byId[constraint.OutgoingHyperTargetId].X;
                 waypoint.ObjectIds = constraint.ObjectIds;
                 waypoints.Add(waypoint);
             }
@@ -379,31 +395,84 @@ namespace LocalCatchAgent.Plugin
             Dictionary<int, RuntimeCatchObject> byId,
             CatchInterval[] effectiveWindows)
         {
+            Dictionary<int, int> constraintByObjectId = new Dictionary<int, int>();
             for (int index = 1; index < constraints.Count; index++)
             {
-                HashSet<int> currentIds = new HashSet<int>(constraints[index].ObjectIds);
-                RuntimeCatchConstraint previous = constraints[index - 1];
+                for (int objectIndex = 0; objectIndex < constraints[index].ObjectIds.Length; objectIndex++)
+                    constraintByObjectId[constraints[index].ObjectIds[objectIndex]] = index;
+            }
+
+            for (int sourceIndex = 1; sourceIndex < constraints.Count; sourceIndex++)
+            {
                 int targetId = -1;
-                for (int objectIndex = 0; objectIndex < previous.ObjectIds.Length; objectIndex++)
+                RuntimeCatchConstraint sourceConstraint = constraints[sourceIndex];
+                for (int objectIndex = 0; objectIndex < sourceConstraint.ObjectIds.Length; objectIndex++)
                 {
                     RuntimeCatchObject source;
-                    if (!byId.TryGetValue(previous.ObjectIds[objectIndex], out source)) continue;
-                    if (source.HyperTargetId >= 0 && currentIds.Contains(source.HyperTargetId))
-                    {
-                        targetId = source.HyperTargetId;
-                        break;
-                    }
+                    if (!byId.TryGetValue(sourceConstraint.ObjectIds[objectIndex], out source)
+                        || source.HyperTargetId < 0) continue;
+                    if (targetId >= 0 && targetId != source.HyperTargetId)
+                        throw new InvalidOperationException("Multiple hyperdash targets leave the constraint at "
+                            + sourceConstraint.Time + "ms.");
+                    targetId = source.HyperTargetId;
                 }
                 if (targetId < 0) continue;
 
-                RuntimeCatchObject target = byId[targetId];
-                constraints[index].ForcedHyperTargetId = targetId;
-                previous.DepartsByHyperDash = true;
-                effectiveWindows[index] = effectiveWindows[index].Intersect(CatchInterval.Point(target.X));
+                RuntimeCatchObject target;
+                int targetIndex;
+                if (!byId.TryGetValue(targetId, out target)
+                    || !constraintByObjectId.TryGetValue(targetId, out targetIndex)
+                    || targetIndex <= sourceIndex)
+                {
+                    throw new InvalidOperationException("Hyperdash target " + targetId
+                        + " is not a later hard constraint.");
+                }
+
+                sourceConstraint.DepartsByHyperDash = true;
+                sourceConstraint.OutgoingHyperTargetId = targetId;
+                constraints[targetIndex].ForcedHyperTargetId = targetId;
+                effectiveWindows[targetIndex] = effectiveWindows[targetIndex].Intersect(CatchInterval.Point(target.X));
                 EnsureNotEmpty(
-                    effectiveWindows[index],
-                    constraints[index],
+                    effectiveWindows[targetIndex],
+                    constraints[targetIndex],
                     "hyperdash target centre is outside a simultaneous-object window");
+
+                for (int index = sourceIndex + 1; index <= targetIndex; index++)
+                {
+                    if (constraints[index].HyperSegmentTargetId >= 0
+                        && constraints[index].HyperSegmentTargetId != targetId)
+                    {
+                        throw new InvalidOperationException("Overlapping hyperdash segments meet at "
+                            + constraints[index].Time + "ms.");
+                    }
+                    constraints[index].HyperSegmentTargetId = targetId;
+                    constraints[index].HyperSegmentSourceConstraintIndex = sourceIndex;
+                }
+
+                CatchInterval sourceWindow = effectiveWindows[sourceIndex];
+                double arrivalTime = Math.Max(sourceConstraint.Time + 1.0,
+                    target.Time - HyperArrivalLead);
+                double travelDuration = arrivalTime - sourceConstraint.Time;
+                for (int index = sourceIndex + 1; index <= targetIndex; index++)
+                {
+                    double amount = (constraints[index].Time - sourceConstraint.Time) / travelDuration;
+                    amount = Math.Max(0.0, Math.Min(1.0, amount));
+                    if (amount >= 1.0 - Epsilon)
+                    {
+                        EnsureContains(effectiveWindows[index], target.X, constraints[index],
+                            "hyperdash arrives outside an intermediate-object window");
+                        continue;
+                    }
+
+                    double sourceWeight = 1.0 - amount;
+                    CatchInterval requiredSourceWindow = new CatchInterval(
+                        (effectiveWindows[index].Minimum - amount * target.X) / sourceWeight,
+                        (effectiveWindows[index].Maximum - amount * target.X) / sourceWeight);
+                    sourceWindow = sourceWindow.Intersect(requiredSourceWindow);
+                }
+                effectiveWindows[sourceIndex] = sourceWindow;
+                EnsureNotEmpty(sourceWindow, sourceConstraint,
+                    "no source position keeps the complete hyperdash segment inside its object windows");
             }
         }
 
@@ -416,7 +485,7 @@ namespace LocalCatchAgent.Plugin
             EnsureNotEmpty(backward[backward.Length - 1], constraints[constraints.Count - 1], "empty final window");
             for (int index = constraints.Count - 2; index >= 0; index--)
             {
-                if (constraints[index + 1].ForcedHyperTargetId >= 0)
+                if (constraints[index + 1].HyperSegmentTargetId >= 0)
                 {
                     // Once the source is caught, stable computes a speed that lands
                     // at the target centre one frame early.  The source window itself
@@ -443,7 +512,7 @@ namespace LocalCatchAgent.Plugin
             EnsureNotEmpty(reachable[0], constraints[0], "initial catcher position cannot reach the map");
             for (int index = 1; index < constraints.Count; index++)
             {
-                if (constraints[index].ForcedHyperTargetId >= 0)
+                if (constraints[index].HyperSegmentTargetId >= 0)
                 {
                     reachable[index] = backward[index];
                 }
@@ -467,7 +536,7 @@ namespace LocalCatchAgent.Plugin
             for (int index = 1; index < constraints.Count; index++)
             {
                 CatchInterval available;
-                if (constraints[index].ForcedHyperTargetId >= 0)
+                if (constraints[index].HyperSegmentTargetId >= 0)
                 {
                     available = backward[index];
                 }
@@ -547,7 +616,7 @@ namespace LocalCatchAgent.Plugin
         {
             for (int index = start; index != endExclusive; index += step)
             {
-                if (index <= 0 || constraints[index].ForcedHyperTargetId >= 0) continue;
+                if (index <= 0 || constraints[index].HyperSegmentTargetId >= 0) continue;
 
                 CatchInterval allowed = reachable[index];
                 int previousDelta = constraints[index].Time - constraints[index - 1].Time;
@@ -555,7 +624,7 @@ namespace LocalCatchAgent.Plugin
                     positions[index - 1] - DashSpeed * previousDelta,
                     positions[index - 1] + DashSpeed * previousDelta));
                 if (index + 1 < constraints.Count
-                    && constraints[index + 1].ForcedHyperTargetId < 0)
+                    && constraints[index + 1].HyperSegmentTargetId < 0)
                 {
                     int nextDelta = constraints[index + 1].Time - constraints[index].Time;
                     allowed = allowed.Intersect(new CatchInterval(
@@ -609,6 +678,37 @@ namespace LocalCatchAgent.Plugin
             }
         }
 
+        private static void ProjectHyperDashSegments(
+            List<RuntimeCatchConstraint> constraints,
+            Dictionary<int, RuntimeCatchObject> byId,
+            CatchInterval[] effectiveWindows,
+            double[] positions)
+        {
+            for (int sourceIndex = 1; sourceIndex < constraints.Count; sourceIndex++)
+            {
+                int targetId = constraints[sourceIndex].OutgoingHyperTargetId;
+                if (targetId < 0) continue;
+
+                RuntimeCatchObject target = byId[targetId];
+                double arrivalTime = Math.Max(constraints[sourceIndex].Time + 1.0,
+                    target.Time - HyperArrivalLead);
+                double travelDuration = arrivalTime - constraints[sourceIndex].Time;
+                for (int index = sourceIndex + 1;
+                    index < constraints.Count
+                        && constraints[index].HyperSegmentSourceConstraintIndex == sourceIndex;
+                    index++)
+                {
+                    double amount = (constraints[index].Time - constraints[sourceIndex].Time)
+                        / travelDuration;
+                    amount = Math.Max(0.0, Math.Min(1.0, amount));
+                    positions[index] = positions[sourceIndex]
+                        + (target.X - positions[sourceIndex]) * amount;
+                    EnsureContains(effectiveWindows[index], positions[index], constraints[index],
+                        "projected hyperdash trajectory left an object window");
+                }
+            }
+        }
+
         private static List<RuntimeCatchControlPhase> BuildControls(
             List<RuntimeCatchWaypoint> waypoints,
             CatchPathStyle style)
@@ -618,6 +718,44 @@ namespace LocalCatchAgent.Plugin
             {
                 RuntimeCatchWaypoint previous = waypoints[index - 1];
                 RuntimeCatchWaypoint current = waypoints[index];
+                if (current.ArrivedByHyperDash)
+                {
+                    int sourceIndex = current.HyperSegmentSourceConstraintIndex;
+                    if (sourceIndex != index - 1)
+                        throw new InvalidOperationException("Hyperdash segment begins without its source at "
+                            + current.Time + "ms.");
+                    int targetIndex = index;
+                    while (targetIndex + 1 < waypoints.Count
+                        && waypoints[targetIndex + 1].HyperSegmentSourceConstraintIndex == sourceIndex)
+                    {
+                        targetIndex++;
+                    }
+
+                    RuntimeCatchWaypoint source = waypoints[sourceIndex];
+                    RuntimeCatchWaypoint target = waypoints[targetIndex];
+                    double hyperDisplacement = target.X - source.X;
+                    double hyperDistance = Math.Abs(hyperDisplacement);
+                    if (hyperDistance <= Epsilon)
+                    {
+                        AddPhase(controls, source.Time, target.Time, source.X, target.X,
+                            CatchInputIntent.Idle, 0.0);
+                    }
+                    else
+                    {
+                        double travelEnd = Math.Max(source.Time + 1.0,
+                            target.Time - HyperArrivalLead);
+                        AddPhase(controls, source.Time, travelEnd, source.X, target.X,
+                            hyperDisplacement < 0
+                                ? CatchInputIntent.HyperDashLeft
+                                : CatchInputIntent.HyperDashRight,
+                            hyperDistance / Math.Max(1.0, travelEnd - source.Time));
+                        AddPhase(controls, travelEnd, target.Time, target.X, target.X,
+                            CatchInputIntent.Idle, 0.0);
+                    }
+                    index = targetIndex;
+                    continue;
+                }
+
                 double duration = current.Time - previous.Time;
                 double displacement = current.X - previous.X;
                 double distance = Math.Abs(displacement);
@@ -633,19 +771,7 @@ namespace LocalCatchAgent.Plugin
                     AddPhase(controls, previous.Time, current.Time, previous.X, current.X, CatchInputIntent.Idle, 0.0);
                     continue;
                 }
-
                 int direction = Math.Sign(displacement);
-                if (current.ArrivedByHyperDash)
-                {
-                    double travelEnd = Math.Max(previous.Time + 1.0, current.Time - HyperArrivalLead);
-                    travelEnd = Math.Min(current.Time, travelEnd);
-                    AddPhase(controls, previous.Time, travelEnd, previous.X, current.X,
-                        direction < 0 ? CatchInputIntent.HyperDashLeft : CatchInputIntent.HyperDashRight,
-                        distance / Math.Max(1.0, travelEnd - previous.Time));
-                    AddPhase(controls, travelEnd, current.Time, current.X, current.X, CatchInputIntent.Idle, 0.0);
-                    continue;
-                }
-
                 if (distance <= WalkSpeed * duration + Epsilon)
                 {
                     double walkDuration = distance / WalkSpeed;
@@ -721,7 +847,7 @@ namespace LocalCatchAgent.Plugin
             {
                 if (!effectiveWindows[index].Contains(positions[index], 0.00001))
                     throw new InvalidOperationException("Trajectory left object window at " + constraints[index].Time + "ms.");
-                if (index == 0 || constraints[index].ForcedHyperTargetId >= 0) continue;
+                if (index == 0 || constraints[index].HyperSegmentTargetId >= 0) continue;
                 double distance = Math.Abs(positions[index] - positions[index - 1]);
                 double available = constraints[index].Time - constraints[index - 1].Time;
                 if (distance > DashSpeed * available + 0.00001)
@@ -789,6 +915,17 @@ namespace LocalCatchAgent.Plugin
             string reason)
         {
             if (!interval.IsEmpty) return;
+            throw new InvalidOperationException(reason + " at " + constraint.Time
+                + "ms (constraint " + constraint.Index + ").");
+        }
+
+        private static void EnsureContains(
+            CatchInterval interval,
+            double value,
+            RuntimeCatchConstraint constraint,
+            string reason)
+        {
+            if (interval.Contains(value, 0.00001)) return;
             throw new InvalidOperationException(reason + " at " + constraint.Time
                 + "ms (constraint " + constraint.Index + ").");
         }

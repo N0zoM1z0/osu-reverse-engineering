@@ -153,6 +153,9 @@ public sealed class CatchConstraint
     public required IReadOnlyList<int> ObjectIds { get; init; }
     public required bool IsSyntheticStart { get; init; }
     public int? ForcedHyperTargetObjectId { get; set; }
+    public int? HyperSegmentTargetObjectId { get; set; }
+    public int HyperSegmentSourceConstraintIndex { get; set; } = -1;
+    public int? OutgoingHyperTargetObjectId { get; set; }
 }
 
 public sealed class CatchWaypoint
@@ -163,6 +166,11 @@ public sealed class CatchWaypoint
     public required Interval ObjectWindow { get; init; }
     public required bool IsSyntheticStart { get; init; }
     public required bool ArrivedByHyperDash { get; init; }
+    public required int HyperSegmentSourceConstraintIndex { get; init; }
+    public required int? HyperSegmentTargetObjectId { get; init; }
+    public required double HyperTargetX { get; init; }
+    public required int? OutgoingHyperTargetObjectId { get; init; }
+    public required double OutgoingHyperTargetX { get; init; }
     public required IReadOnlyList<int> ObjectIds { get; init; }
 }
 

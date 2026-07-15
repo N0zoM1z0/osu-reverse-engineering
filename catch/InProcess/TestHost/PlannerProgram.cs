@@ -21,6 +21,7 @@ internal static class PlannerProgram
             List<RuntimeCatchObject> objects = new List<RuntimeCatchObject>();
             objects.Add(Object(1, 1000, 256, RuntimeCatchObjectKind.Fruit, -1));
             objects.Add(Object(2, 1500, 400, RuntimeCatchObjectKind.Fruit, 3));
+            objects.Add(Object(8, 1575, 230, RuntimeCatchObjectKind.TinyDroplet, -1));
             objects.Add(Object(3, 1650, 100, RuntimeCatchObjectKind.Fruit, -1));
             objects.Add(Object(4, 1900, 160, RuntimeCatchObjectKind.TinyDroplet, -1));
             objects.Add(Object(5, 2100, 245, RuntimeCatchObjectKind.Droplet, -1));
@@ -29,11 +30,18 @@ internal static class PlannerProgram
 
             RuntimeCatchPlan first = RuntimeCatchPlanner.Build(objects, 106.75, options, 1337, "synthetic.osu");
             RuntimeCatchPlan second = RuntimeCatchPlanner.Build(objects, 106.75, options, 1337, "synthetic.osu");
-            Assert(first.Waypoints.Count == 8, "unexpected waypoint count");
+            Assert(first.Waypoints.Count == 9, "unexpected waypoint count");
             Assert(first.HyperDashCount == 1, "hyperdash link was not retained");
-            Assert(first.TinyDropletCount == 2, "tiny droplets were not retained");
-            Assert(first.Waypoints[3].ArrivedByHyperDash, "hyperdash target was not forced");
-            Assert(Math.Abs(first.Waypoints[3].X - 100.0) < 0.0001, "hyperdash target is not centred");
+            Assert(first.TinyDropletCount == 3, "tiny droplets were not retained");
+            Assert(first.Waypoints[3].ArrivedByHyperDash,
+                "intermediate tiny was not attached to the hyperdash segment");
+            Assert(first.Waypoints[4].ArrivedByHyperDash, "hyperdash target was not forced");
+            Assert(Math.Abs(first.Waypoints[4].X - 100.0) < 0.0001,
+                "hyperdash target is not centred");
+            Assert(first.Waypoints[3].HyperSegmentSourceConstraintIndex == 2,
+                "intermediate tiny lost its hyperdash source");
+            Assert(Math.Abs(first.ReferenceX(1575) - 230.0) < first.CollisionRadius,
+                "continuous hyperdash path missed its intermediate tiny");
 
             for (int index = 0; index < first.Waypoints.Count; index++)
             {
