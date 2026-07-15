@@ -28,8 +28,8 @@ manual and Agent control.
 The most useful result was not a perfect score claim. It was a model: every mandatory catch
 becomes an interval, ordinary movement expands intervals linearly in time, and the complete map
 becomes a one-dimensional viability tube. Feasibility is solved first. Smoothness, style, and
-controlled variation are allowed only inside the proven tube. On the development corpus, all
-eight native Catch difficulties and four route styles passed. In the live client, the frozen
+controlled variation are allowed only inside the proven tube. On the expanded development corpus,
+all 29 native Catch difficulties and four route styles passed. In the live client, the frozen
 baseline caught all `1,525/1,525` required objects on one dense difficulty and completed the
 hardest test with `1,278/1,280` fruits plus `107/107` tiny droplets.
 
@@ -425,6 +425,18 @@ target X, current clock, target time, and a one-frame arrival lead. The planner 
 multiplier. It places the route at the source, holds the correct direction, and lets the original
 Catch movement code create and consume the boost.
 
+The arrival lead is usable time, not decorative slack. Stable reaches the target centre at
+
+$$
+t_a=t_{target}-1000/60,
+$$
+
+then clears the exceptional multiplier after crossing the centre. The planner may therefore use
+ordinary movement between `t_a` and the target timestamp, provided the target-time position remains
+inside the object's catch window. This distinction became essential when a hyper target was
+followed by another fruit that was unreachable from the centre at `t_target`, but reachable after
+departing during that final frame.
+
 ## 11. Why the live agent consumes converted runtime objects
 
 The in-process snapshot walks the Catch manager's object manager and keeps every object derived
@@ -563,8 +575,8 @@ for (var i = 0; i < 7 && high - low >= 0.20; i++)
 ```
 
 Feasibility is monotone: if a margin is feasible, a smaller margin is also feasible. That makes a
-binary search appropriate. On the local corpus, ordinary difficulties reached `9.75 px`; the two
-tightest difficulties settled at `7.5 px` and `1.5 px`.
+binary search appropriate. On the expanded 29-map corpus, 28 difficulties reached `9.75 px`; the
+remaining dense map settled at `9.25 px`.
 
 ## 15. Turning waypoints into physical control phases
 
@@ -597,9 +609,10 @@ with millisecond-scale pulse-width modulation. That version generated tens of th
 left/right state changes and visibly shook around the reference path. A few long phases are both
 closer to the recovered movement model and kinder to the input queue.
 
-Hyper segments are represented as directional dash intent ending approximately one 60 Hz frame
-before the target timestamp, followed by an idle nominal phase at the target center. The live
-feedback layer can still correct within the physical catch window.
+Hyper segments are represented as directional dash intent ending at the target centre
+approximately one 60 Hz frame before the target timestamp. The remaining frame is compiled as an
+ordinary movement phase from the centre to the selected object-time waypoint. When no following
+constraint needs that head start, the phase naturally collapses to idle.
 
 ## 16. Entering the process without patching the executable
 
@@ -749,6 +762,30 @@ becomes the previous waypoint; the outgoing target becomes `next` and supplies t
 This is a compact example of why control modes matter. “Press toward the next target early” sounds
 reasonable until velocity is stateful and inherited from a previous event.
 
+### 20.1 The frame after arrival was not idle
+
+An expanded corpus exposed the complementary mistake. Two dense sequences were rejected as
+mathematically infeasible even with zero safety margin. Both had the same shape: a long hyperdash
+landed at an extreme target, followed 200 ms later by a fruit on the opposite side. Forcing the
+catcher to remain exactly at the target centre until the target timestamp discarded the arrival
+lead and made the next ordinary edge a fraction of a pixel too long.
+
+Let `tau = 1000/60` and let `I_t` be the target's collision interval. Once the hyper path reaches
+`x_t` at `t_t-tau`, the legal target-time set is
+
+$$
+I_t^{post}=I_t\cap[x_t-v_d\tau,\ x_t+v_d\tau].
+$$
+
+The planner now propagates any constraints in that short post-arrival interval, intersects the
+result with future backward viability, and reconstructs a path that passes through the exact
+centre at arrival before departing. Tiny droplets before arrival remain constrained to the linear
+hyper segment; post-arrival objects use ordinary speed bounds.
+
+This is not a special case for either timestamp. The same rule raised the expanded runtime corpus
+to 29 maps, 116 deterministic style builds, 112,432 constraints, and 18,872 hyper links with no
+window or speed violation. The tightest complete route retained 9.25 px measured clearance.
+
 ## 21. Crossing the real keyboard boundary
 
 The agent resolves bindings `FruitsLeft`, `FruitsRight`, and `FruitsDash` through the client's own
@@ -854,7 +891,7 @@ stable result is:
 
 ```text
 CATCH NET40 PLANNER: PASS
-objects=7, constraints=7, phases=20, hyper=1
+objects=8, constraints=8, phases=20, hyper=1
 ```
 
 This catches accidental divergence between the readable .NET 8 model and the source that can
@@ -870,13 +907,13 @@ The frozen development corpus result is:
 
 ```text
 RUNTIME CATCH CORPUS: PASS
-maps=8, style-builds=32,
-aggregate-constraints=35168,
-aggregate-hyper-links=6180
+maps=29, style-builds=116,
+aggregate-constraints=112432,
+aggregate-hyper-links=18872
 ```
 
-It also measures actual local clearance. On the hardest difficulty only three constraints remained
-below 8 px; every other constraint benefited from the locally inset smoothing window.
+It also measures actual local clearance. Every measured constraint retained at least 9.25 px;
+28 of the 29 difficulties reached the 9.75 px search cap.
 
 ### 24.5 Reflection-only metadata probe
 
@@ -945,7 +982,8 @@ The limits are concrete:
 - An unflagged song-clock freeze after gameplay begins stops the baseline session.
 - Bananas are not hard route constraints.
 - Tiny droplets can be made soft through the UI, but the default keeps them hard.
-- Live evidence covers a local eight-difficulty corpus and selected full runs, not every mapping
+- Offline evidence covers a local 29-difficulty corpus; live evidence covers selected full runs,
+  not every mapping
   style or client update.
 - The hardest measured run still missed two fruits.
 

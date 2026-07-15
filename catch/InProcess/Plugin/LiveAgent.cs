@@ -621,19 +621,18 @@ namespace LocalCatchAgent.Plugin
             // sample the outgoing target becomes `next` and supplies the new direction.
             if (next.DepartsByHyperDash
                 && !next.ArrivedByHyperDash
-                && nextIndex + 1 < sessionPlan.Waypoints.Count
                 && clock >= next.Time - HyperPreArmMilliseconds)
             {
-                RuntimeCatchWaypoint hyperTarget = sessionPlan.Waypoints[nextIndex + 1];
-                SetDirection(decision, hyperTarget.X - actualX);
+                SetDirection(decision, next.OutgoingHyperTargetX - actualX);
                 decision.Dash = true;
                 return decision;
             }
 
             if (next.ArrivedByHyperDash && clock < next.Time)
             {
-                if (Math.Abs(targetError) > deadband)
-                    SetDirection(decision, targetError);
+                double hyperTargetError = next.HyperTargetX - actualX;
+                if (Math.Abs(hyperTargetError) > deadband)
+                    SetDirection(decision, hyperTargetError);
                 decision.Dash = true;
                 return decision;
             }

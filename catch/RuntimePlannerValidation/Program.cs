@@ -134,6 +134,10 @@ static void Verify(RuntimeCatchPlan plan, RuntimeCatchPlan repeated)
         var waypoint = plan.Waypoints[index];
         if (!waypoint.ObjectWindow.Contains(waypoint.X, 0.00001))
             throw new InvalidOperationException("waypoint escaped object window at " + waypoint.Time + "ms");
+        var referenceX = plan.ReferenceX(waypoint.Time);
+        if (!waypoint.ObjectWindow.Contains(referenceX, 0.00001))
+            throw new InvalidOperationException("control path escaped object window at "
+                + waypoint.Time + "ms");
         if (Math.Abs(waypoint.X - repeated.Waypoints[index].X) > 0.0000001)
             throw new InvalidOperationException("fixed-seed path was not repeatable");
         if (index == 0 || waypoint.ArrivedByHyperDash)

@@ -6,10 +6,11 @@ agent reads osu!'s converted Catch objects and actual catcher geometry, computes
 trajectory, then drives the user's configured Left, Right, and Dash keys through ordinary Win32
 scan-code input.
 
-> **Active baseline:** the live source and default DLLs are restored to the 2026-07-14 23:57 SGT
-> snapshot. It retained the measured `1525/1525` result on *The End* and was the first version to
-> complete TAG IV with only two missed fruits (`1278/1280`, all `107/107` tiny droplets caught).
-> Later controller experiments remain under `catch/experiments/` but are not built or launched.
+> **Active build:** the low-chatter controller remains the measured 2026-07-14 23:57 SGT baseline.
+> The planner additionally models the one-frame departure interval after a hyperdash reaches its
+> target centre. It retains the recorded `1525/1525` result on *The End* and the completed TAG IV
+> run (`1278/1280` fruits, all `107/107` tiny droplets caught). Later controller experiments remain
+> under `catch/experiments/` but are not built or launched.
 
 The central abstraction is a one-dimensional viability tube. Every required fruit or droplet
 defines an interval in which the catcher centre may be placed. Those intervals are propagated
@@ -17,10 +18,10 @@ backward and forward under stable's walk, dash, and hyperdash dynamics. Style va
 only after feasibility has been proved, and every variation is projected back into the tube.
 
 No map title, object number, or fixed timestamp appears in the planner. Hyper targets are linked
-from the runtime object graph and pinned to their actual centres. The controller pre-arms an
-outgoing hyper direction for 12 ms only at a non-chained source; a source that is also the target
-of an incoming hyper keeps that incoming direction through collision. This small structural guard
-is the change that recovered the accepted TAG IV behavior without introducing map-specific logic.
+from the runtime object graph; the route passes through the actual target centre at stable's
+one-frame-early arrival time, then may depart inside the remaining ordinary movement cone. The
+controller pre-arms an outgoing hyper direction for 12 ms only at a non-chained source; a source
+that is also the target of an incoming hyper keeps that incoming direction through collision.
 
 ## Layout
 
@@ -47,11 +48,11 @@ catch/scripts/verify-corpus.sh /path/to/osu/Songs /path/to/osu/osu!.exe
 
 The restored net40 test is intentionally compact. It checks deterministic planning, playfield
 containment, movement bounds, and retained hyper links on a synthetic route; its expected summary
-is `objects=7, constraints=7, phases=20, hyper=1`.
+is `objects=8, constraints=8, phases=20, hyper=1`.
 
-The accompanying local corpus check covers eight native Catch difficulties and all four path
-styles. At restoration time it completed 32 builds, 35,168 aggregate constraints, and 6,180
-hyper links. The exact provenance and rollback boundary are recorded in
+The accompanying local corpus check currently covers 29 native Catch difficulties and all four
+path styles. It completed 116 builds, 112,432 aggregate constraints, and 18,872 hyper links; the
+tightest map retained a 9.25 px global clearance. The original rollback provenance is recorded in
 [`BASELINE.md`](BASELINE.md).
 
 ## Runtime architecture
@@ -62,7 +63,7 @@ flowchart LR
     W --> B[Backward viability]
     B --> F[Forward reachability]
     F --> P[Feasible trajectory]
-    P --> H[Pin runtime hyper targets]
+    P --> H[Project hyper arrival and departure]
     H --> S[Smooth path inside tube]
     S --> C[Low-chatter song-clock controller]
     C --> K[Configured scan-code input]
@@ -82,16 +83,18 @@ $$
 |x_{i+1}-x_i| \le v_d(t_{i+1}-t_i), \qquad v_d=1\ \text{px/ms}.
 $$
 
-For a runtime-linked hyper transition, the successor is fixed to the target fruit centre,
+For a runtime-linked hyper transition, the catcher reaches the target centre one 60 Hz frame
+before the target timestamp,
 
 $$
-x_{i+1}=x_{\mathrm{target}},
+x(t_i-1000/60)=x_{\mathrm{target}}.
 $$
 
-and stable's hyperdash supplies the exceptional movement between those constraints. The baseline
-does not pretend that its 12 ms input pre-arm is a second globally proven motion segment. Instead,
-it protects collision headroom at hyper sources, observes the real catcher position, and disables
-early reversal when the source is itself an incoming hyper target.
+The object-time waypoint may then use the remaining ordinary movement cone while staying in its
+catch interval. Stable supplies the exceptional source-to-arrival movement; the planner proves the
+short post-arrival departure separately. The 12 ms input pre-arm remains a controller policy, not
+a second hyper segment, and early reversal stays disabled when the source is itself an incoming
+hyper target.
 
 What this contract can guarantee is model feasibility: all planned hard catches are inside their
 collision intervals and all planned ordinary movements obey the recovered speed model. A Windows

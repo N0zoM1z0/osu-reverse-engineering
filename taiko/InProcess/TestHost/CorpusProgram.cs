@@ -17,20 +17,61 @@ internal static class CorpusProgram
             AgentOptionsSnapshot human = new AgentOptionsSnapshot(
                 true, HumanStyle.Human, 60, -3, 20, 10, 100, 6,
                 FrameCadence.Hz240, false, 1, true);
+            AgentOptionsSnapshot clean = new AgentOptionsSnapshot(
+                true, HumanStyle.Clean, 0, 0, 0, 0, 0, 0,
+                FrameCadence.Native, false, 0, true);
+            const int HardRockDoubleTime = 0x10 | 0x40;
             int maps = 0;
             long objects = 0;
             long strikes = 0;
             long batches = 0;
             long predicted100 = 0;
+            long hrdtBatches = 0;
+            long clippedPulses = 0;
+            long hrdtClippedPulses = 0;
+            int mapTapMilliseconds = InputTimingPolicy.ToMapPulseMilliseconds(
+                InputTimingPolicy.DefaultPhysicalTapMilliseconds,
+                0);
+            int hrdtMapTapMilliseconds = InputTimingPolicy.ToMapPulseMilliseconds(
+                InputTimingPolicy.DefaultPhysicalTapMilliseconds,
+                HardRockDoubleTime);
             foreach (string path in Directory.GetFiles(args[0], "*.osu", SearchOption.AllDirectories))
             {
                 if (!IsNativeTaiko(path))
                     continue;
-                LiveTaikoPlan source = LivePlanBuilder.ParseAndBuild(path, 8, 0);
-                HumanizedPlanResult result = Humanizer.Apply(source, human, 0, 8, null);
+                LiveTaikoPlan source = LivePlanBuilder.ParseAndBuild(
+                    path,
+                    mapTapMilliseconds,
+                    0);
+                HumanizedPlanResult result = Humanizer.Apply(
+                    source,
+                    human,
+                    0,
+                    mapTapMilliseconds,
+                    null);
                 if (result.Miss != 0)
                     throw new InvalidOperationException(Path.GetFileName(path)
                         + ": humanizer predicted " + result.Miss + " misses");
+                clippedPulses += VerifyTransitionStream(result.Plan, mapTapMilliseconds, path);
+
+                LiveTaikoPlan hrdtSource = LivePlanBuilder.ParseAndBuild(
+                    path,
+                    hrdtMapTapMilliseconds,
+                    HardRockDoubleTime);
+                HumanizedPlanResult hrdtResult = Humanizer.Apply(
+                    hrdtSource,
+                    clean,
+                    HardRockDoubleTime,
+                    hrdtMapTapMilliseconds,
+                    12345);
+                if (hrdtResult.Miss != 0)
+                    throw new InvalidOperationException(Path.GetFileName(path)
+                        + ": CLEAN HRDT predicted " + hrdtResult.Miss + " misses");
+                hrdtClippedPulses += VerifyTransitionStream(
+                    hrdtResult.Plan,
+                    hrdtMapTapMilliseconds,
+                    path);
+                hrdtBatches += hrdtResult.Plan.Batches.Count;
                 maps++;
                 objects += source.ObjectCount;
                 strikes += result.Plan.Strikes.Count;
@@ -43,7 +84,11 @@ internal static class CorpusProgram
             Console.WriteLine("TAIKO IN-PROCESS CORPUS TEST: PASS");
             Console.WriteLine("maps=" + maps + ", objects=" + objects
                 + ", strikes=" + strikes + ", batches=" + batches
-                + ", predicted-100=" + predicted100 + ", predicted-miss=0");
+                + ", predicted-100=" + predicted100 + ", predicted-miss=0"
+                + ", clipped-pulses=" + clippedPulses
+                + ", hrdt-batches=" + hrdtBatches
+                + ", hrdt-clipped-pulses=" + hrdtClippedPulses
+                + ", hrdt-predicted-miss=0");
             return 0;
         }
         catch (Exception exception)
@@ -51,6 +96,49 @@ internal static class CorpusProgram
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static int VerifyTransitionStream(
+        LiveTaikoPlan plan,
+        int mapTapMilliseconds,
+        string path)
+    {
+        bool[] down = new bool[4];
+        int clipped = 0;
+        for (int batchIndex = 0; batchIndex < plan.Batches.Count; batchIndex++)
+        {
+            LiveTaikoTransitionBatch batch = plan.Batches[batchIndex];
+            for (int index = 0; index < batch.Transitions.Count; index++)
+            {
+                LiveTaikoTransition transition = batch.Transitions[index];
+                if (down[transition.Key] == transition.IsDown)
+                    throw new InvalidOperationException(Path.GetFileName(path)
+                        + ": non-alternating key stream at " + transition.Time + "ms");
+                if (transition.IsDown)
+                {
+                    if (transition.DownTime != transition.Time)
+                        throw new InvalidOperationException(Path.GetFileName(path)
+                            + ": down transition lost its pulse origin");
+                }
+                else
+                {
+                    int duration = transition.Time - transition.DownTime;
+                    if (duration < 1 || duration > mapTapMilliseconds)
+                        throw new InvalidOperationException(Path.GetFileName(path)
+                            + ": invalid pulse duration " + duration + "ms");
+                    if (duration < mapTapMilliseconds)
+                        clipped++;
+                }
+                down[transition.Key] = transition.IsDown;
+            }
+        }
+        for (int key = 0; key < down.Length; key++)
+        {
+            if (down[key])
+                throw new InvalidOperationException(Path.GetFileName(path)
+                    + ": key " + key + " remains pressed after plan");
+        }
+        return clipped;
     }
 
     private static bool IsNativeTaiko(string path)

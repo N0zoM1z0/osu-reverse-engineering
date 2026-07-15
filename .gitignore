@@ -11,6 +11,8 @@ Thumbs.db
 **/obj/
 *.pdb
 *.cache
+__pycache__/
+*.py[cod]
 
 # Runtime output
 *.log

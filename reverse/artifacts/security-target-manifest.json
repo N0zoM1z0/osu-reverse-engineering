@@ -1,0 +1,719 @@
+{
+    "schema":  1,
+    "generatedBy":  "reverse/scripts/extract-security-surface.ps1",
+    "safety":  {
+                   "reflectionOnly":  true,
+                   "invokesTargetMethods":  false,
+                   "attachesToProcess":  false,
+                   "performsNetworkActivity":  false
+               },
+    "executable":  {
+                       "fileName":  "osu!.exe",
+                       "productVersion":  "1.3.3.8",
+                       "assemblyVersion":  "0.0.0.0",
+                       "architecture":  "PE32 / x86 / CLR",
+                       "sha256":  "6e182c10d1813209d12753dbc70b3a5bba00fef4ecf64bc42051870e6dfe4b7d",
+                       "moduleVersionId":  "0ec6eb3a-4adc-4b54-1f45-8b4ed40b33b1",
+                       "authenticodeStatus":  "Valid",
+                       "signerSubject":  "CN=ppy Pty Ltd, O=ppy Pty Ltd, L=Wembley, S=Western Australia, C=AU"
+                   },
+    "methods":  [
+                    {
+                        "layer":  "executable-trust",
+                        "label":  "startup-entry",
+                        "token":  "0x060023b9",
+                        "declaringType":  "#=zQ2$xPbn$RARd4YfdBA==",
+                        "method":  "#=zW0veNPU=",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  1202,
+                        "ilSha256":  "2b3272df5ec4301c5500b5defc8ae3302bfbde70dce097a218144edaefea3862"
+                    },
+                    {
+                        "layer":  "executable-trust",
+                        "label":  "authenticode-file-validator",
+                        "token":  "0x060035ad",
+                        "declaringType":  "#=zfzO80LxKCA0mu0lSJQWPLd8=",
+                        "method":  "#=zq4EZmJg=",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+                                               "System.String"
+                                           ],
+                        "ilBytes":  217,
+                        "ilSha256":  "b23ce22a514dffdae63a66f07c97906c0553b2c8febbffbaf6f42f9e57882f81"
+                    },
+                    {
+                        "layer":  "executable-trust",
+                        "label":  "update-directory-signature-scan",
+                        "token":  "0x06000d79",
+                        "declaringType":  "#=z5iLX4JZ8b4WIdfTcPvUEz7U=",
+                        "method":  "#=z9NKYCg51DfTy",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+                                               "System.Boolean"
+                                           ],
+                        "ilBytes":  451,
+                        "ilSha256":  "975055d6b0cc94ddf7716ec0116a75abac203a5b97a7020f0a254e7a1ca3900b"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-initialization",
+                        "token":  "0x06002237",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=z4ysZrQY=",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  1674,
+                        "ilSha256":  "14acd4076dec076a5c7b9800dc9680a29e24aba978d72d7fa38687d5083931ee"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-finish-and-submit-gates",
+                        "token":  "0x06002267",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=zFziBbqkT6yib",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  815,
+                        "ilSha256":  "a0eb0ab9a70a0b45baeb28d04bad91e511b77bde76f173588b5144d5077f9149"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-main-update-and-clock-guards",
+                        "token":  "0x0600226b",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=zMHcg8Xo=",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  4298,
+                        "ilSha256":  "8c44682aa935ae0235f2c26250b2f377931c0692c4a6030984d7bb513fc10505"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-redundant-score-check-a",
+                        "token":  "0x06002276",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=zpVSszU_wWCWV",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  277,
+                        "ilSha256":  "b199adabf662a1ab9c2ed2083d7e3811046453bddf3a04b6b5091b85bde1c5e5"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-redundant-score-check-b",
+                        "token":  "0x06002279",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=z8cn7zarjyTWnw_rqDg==",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  649,
+                        "ilSha256":  "ff3decb0e46c1df699d398309091c471436bbf1890d691fc7cf2360f9780d4d5"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-input-and-replay-recorder",
+                        "token":  "0x0600229b",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=zMqt8yyc=",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  475,
+                        "ilSha256":  "3c79f4c445392b41ae414f3795b5aba8804e66b1cf2e8defe60f66288841b4a5"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-finish-eligibility-a",
+                        "token":  "0x060022a1",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=z6gGnJxkf49$85QBqgA==",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  109,
+                        "ilSha256":  "65caac3d9d60ae8702a1067f338368783da34c115d0beffd94140841cae2c547"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-finish-eligibility-b",
+                        "token":  "0x060022a2",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=z0ukxTIt1QnxvSWrjlQ==",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  123,
+                        "ilSha256":  "11d84afe1e14a7403e60e4a8df24bc1af49b91d4299f959e5841198b8714ea3f"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-runtime-integrity-aggregate",
+                        "token":  "0x060022a6",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=zCOdh4CldVBmI",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  291,
+                        "ilSha256":  "e2bc9b012a373595d1a110991d41e3fcde65ab3d62af56bbf0897d1d9e142b60"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "player-movement-vector-monitor",
+                        "token":  "0x060022a9",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                        "method":  "#=z$sND2aiBIkq_",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+                                               "Microsoft.Xna.Framework.Vector2",
+                                               "Microsoft.Xna.Framework.Vector2"
+                                           ],
+                        "ilBytes":  283,
+                        "ilSha256":  "360aca6e3bc278c1850e51e001aa3b9421bdc4a14715dd4edcbdcf4e0ab82fb6"
+                    },
+                    {
+                        "layer":  "gameplay-evidence",
+                        "label":  "guarded-process-snapshot-callback",
+                        "token":  "0x060022ce",
+                        "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp+#=zfRsrncc=",
+                        "method":  "#=z2DsIiMjRUt2II5rW5CYhWAY=",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  11,
+                        "ilSha256":  "96ee9e2558e0148a7f0967bb9c7437746eb99960ddcf829582cc6886398ac260"
+                    },
+                    {
+                        "layer":  "score-envelope",
+                        "label":  "score-checksum",
+                        "token":  "0x06002b43",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zpXEcp4TZ9AB6IDUaeA==",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  266,
+                        "ilSha256":  "b99748043d80de3ae4279fb20f6397a4ab1178c313c51dac546108cc316fd28a"
+                    },
+                    {
+                        "layer":  "score-envelope",
+                        "label":  "replay-frame-serialization",
+                        "token":  "0x06002b46",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zrJU26kh_ff24",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  255,
+                        "ilSha256":  "68120a057f83cfe08fc38baca6933cc1e2a7efdbddfdd5935e02e3c1b6658e97"
+                    },
+                    {
+                        "layer":  "score-envelope",
+                        "label":  "score-summary-and-integrity-signal-serialization",
+                        "token":  "0x06002b52",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zGD2gEVmGH5pd",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  355,
+                        "ilSha256":  "eb18f446c38c5b9cea264ccafc70cc145036578ccb2334a34249dbdffb3fbe17"
+                    },
+                    {
+                        "layer":  "score-envelope",
+                        "label":  "comprehensive-score-checksum",
+                        "token":  "0x06002b53",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zFLTC5PJClvsV5_OOeA==",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  456,
+                        "ilSha256":  "5d479037161f69563f2eee451e0cac991a519bc8cddf59259bd461e0647f6ae6"
+                    },
+                    {
+                        "layer":  "score-envelope",
+                        "label":  "score-invalidator",
+                        "token":  "0x06002b5a",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zEGgm3vzg7f8p",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  8,
+                        "ilSha256":  "8617be66cf52ecd2bfe9ff53bfab749a9d29e201c7ee5709e8e03816d815509b"
+                    },
+                    {
+                        "layer":  "score-envelope",
+                        "label":  "periodic-score-sample-serialization",
+                        "token":  "0x06002b5b",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zEBIpkG13yCEp",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  232,
+                        "ilSha256":  "6d13dfd63e5886a6c43429b618b31faba4b4793940aa7fd53caf2909145f9f4c"
+                    },
+                    {
+                        "layer":  "submission-boundary",
+                        "label":  "score-submit-entry",
+                        "token":  "0x06002b5c",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zFXddS38=",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  90,
+                        "ilSha256":  "32af1f783f746dc5b08ac1a8d6f7a9bc270b35d62620bff0934f1dba8d5a20d5"
+                    },
+                    {
+                        "layer":  "submission-boundary",
+                        "label":  "score-submit-worker",
+                        "token":  "0x06002b6c",
+                        "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                        "method":  "#=zOEoRv1Aa1kOI",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+                                               "System.Object",
+                                               "System.ComponentModel.DoWorkEventArgs"
+                                           ],
+                        "ilBytes":  41,
+                        "ilSha256":  "33dfacb7e88e774b93f082edea7ae69009a2eb202442fb6232f9bcfcaf95b49e"
+                    },
+                    {
+                        "layer":  "submission-boundary",
+                        "label":  "logged-in-predicate",
+                        "token":  "0x0600469b",
+                        "declaringType":  "#=zv5kxZvtuwX0FTN9D3w==",
+                        "method":  "#=z34mt0dWNZMV2",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  28,
+                        "ilSha256":  "d193a6b48e7bddf082e001de89728ee56505257294127af54694bbefc8fe8ca2"
+                    },
+                    {
+                        "layer":  "telemetry-boundary",
+                        "label":  "periodic-integrity-coordinator",
+                        "token":  "0x06004867",
+                        "declaringType":  "#=zwCjzHeXWTQWpPdnD9sauHTcK6U$P",
+                        "method":  "#=zMHcg8Xo=",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  263,
+                        "ilSha256":  "a9c11505acf5170cc577487c4d256b58a7e8c987c55441be5d0c8276e52f9efd"
+                    },
+                    {
+                        "layer":  "telemetry-boundary",
+                        "label":  "telemetry-event-dispatch",
+                        "token":  "0x0600486a",
+                        "declaringType":  "#=zwCjzHeXWTQWpPdnD9sauHTcK6U$P",
+                        "method":  "#=zUsu_IgY=",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+                                               "System.Int32",
+                                               "System.String"
+                                           ],
+                        "ilBytes":  42,
+                        "ilSha256":  "69b3ba5f4e07cb0c1477288414d9adc8398ded9f14c74d53a43823a40e673373"
+                    },
+                    {
+                        "layer":  "telemetry-boundary",
+                        "label":  "telemetry-stage-dispatch",
+                        "token":  "0x06004872",
+                        "declaringType":  "#=zwCjzHeXWTQWpPdnD9sauHTcK6U$P",
+                        "method":  "#=z$vf2QcIxAhQG",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+                                               "System.Boolean"
+                                           ],
+                        "ilBytes":  38,
+                        "ilSha256":  "74ee2997fc5123c6d4d7f1012d16070731437b95f48cff501f467a94dc01b39b"
+                    },
+                    {
+                        "layer":  "process-observation",
+                        "label":  "background-app-compatibility-scanner",
+                        "token":  "0x0600284c",
+                        "declaringType":  "#=zULOT1YgB9IvZs7pvS7FyDmc=",
+                        "method":  "#=z30Y9OFQ=",
+                        "isStatic":  false,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  217,
+                        "ilSha256":  "5c49da5760cd65dbb3fa820d059eb94ae56b64fe4f33781ee6aa62bdda29f97a"
+                    },
+                    {
+                        "layer":  "code-protection",
+                        "label":  "vm-dispatcher-accessor",
+                        "token":  "0x0600275a",
+                        "declaringType":  "#=zT$qKf0G2i_NV6FWd9gZyGItRwHi5QwburW$xfltYnOqBpYiiSg==",
+                        "method":  "#=zzfu9$ebohWJdLOJSBGG00Jmk3TqdSV4wHvJu_87JfHUmF9ecVg==",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+
+                                           ],
+                        "ilBytes":  28,
+                        "ilSha256":  "9033e8f5e4e9c5ce9fbfc6d6c48b8d021f976d31aeefefc23c2fded466bb7f08"
+                    },
+                    {
+                        "layer":  "code-protection",
+                        "label":  "protected-string-wrapper",
+                        "token":  "0x060049b0",
+                        "declaringType":  "#=zySOc7Do_dzm08ncyIBSV9dOMD9tf",
+                        "method":  "#=zRowYqXA=",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+                                               "System.Int32"
+                                           ],
+                        "ilBytes":  25,
+                        "ilSha256":  "7b346d09aca9fa4ae831504d5432fd3f93a8c52650e302e9b297bb530121cef3"
+                    },
+                    {
+                        "layer":  "code-protection",
+                        "label":  "protected-string-decoder",
+                        "token":  "0x060049b1",
+                        "declaringType":  "#=zySOc7Do_dzm08ncyIBSV9dOMD9tf",
+                        "method":  "#=z7jsBIlRe1S8fSUeq7vtDy$blJjfy",
+                        "isStatic":  true,
+                        "parameterTypes":  [
+                                               "System.Int32",
+                                               "System.Boolean"
+                                           ],
+                        "ilBytes":  2181,
+                        "ilSha256":  "7735a0be03dfe6d08ec7eab4b3419c017a8bbf5666a54f158b03661cfe2418a5"
+                    }
+                ],
+    "fields":  [
+                   {
+                       "layer":  "score-envelope",
+                       "label":  "global-current-score",
+                       "token":  "0x040013c3",
+                       "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                       "field":  "#=z4I3SuP2FWHyu",
+                       "fieldType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                       "isStatic":  true
+                   },
+                   {
+                       "layer":  "score-envelope",
+                       "label":  "score-validity",
+                       "token":  "0x04001990",
+                       "declaringType":  "#=zWQjPCUezkZ$WXRmRpbq0cfjnab5SCorhHC9a1HY=",
+                       "field":  "#=zbyvN0E3sLStJ",
+                       "fieldType":  "System.Boolean",
+                       "isStatic":  false
+                   },
+                   {
+                       "layer":  "gameplay-evidence",
+                       "label":  "integrity-signal-flags",
+                       "token":  "0x040013f9",
+                       "declaringType":  "#=zOzP1rPg3E8uUj1uRyHI8VvJbIxgp",
+                       "field":  "#=zQ1pk95Y=",
+                       "fieldType":  "#=zEEOA4hI76H_vy1$BGyFQ6G_jTPrn",
+                       "isStatic":  true
+                   }
+               ],
+    "nativeImportSummary":  [
+                                {
+                                    "module":  "/system/library/frameworks/agl.framework/versions/current/agl",
+                                    "declarations":  44
+                                },
+                                {
+                                    "module":  "/system/library/frameworks/carbon.framework/versions/current/carbon",
+                                    "declarations":  4
+                                },
+                                {
+                                    "module":  "avcodec-51.dll",
+                                    "declarations":  82
+                                },
+                                {
+                                    "module":  "avformat-52.dll",
+                                    "declarations":  63
+                                },
+                                {
+                                    "module":  "avutil-49.dll",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "bass.dll",
+                                    "declarations":  129
+                                },
+                                {
+                                    "module":  "bass_fx.dll",
+                                    "declarations":  18
+                                },
+                                {
+                                    "module":  "crypt32.dll",
+                                    "declarations":  2
+                                },
+                                {
+                                    "module":  "dwmapi.dll",
+                                    "declarations":  11
+                                },
+                                {
+                                    "module":  "elopubif.dll",
+                                    "declarations":  2
+                                },
+                                {
+                                    "module":  "hid.dll",
+                                    "declarations":  3
+                                },
+                                {
+                                    "module":  "imm32.dll",
+                                    "declarations":  4
+                                },
+                                {
+                                    "module":  "kernel32",
+                                    "declarations":  3
+                                },
+                                {
+                                    "module":  "kernel32.dll",
+                                    "declarations":  24
+                                },
+                                {
+                                    "module":  "libdl.dylib",
+                                    "declarations":  8
+                                },
+                                {
+                                    "module":  "libegl.dll",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "libx11",
+                                    "declarations":  3
+                                },
+                                {
+                                    "module":  "ncrypt.dll",
+                                    "declarations":  4
+                                },
+                                {
+                                    "module":  "ntdll.dll",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "nvapi.dll",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "nvapi64.dll",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "sdl2.dll",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "setupapi.dll",
+                                    "declarations":  5
+                                },
+                                {
+                                    "module":  "shell32.dll",
+                                    "declarations":  2
+                                },
+                                {
+                                    "module":  "user32",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "user32.dll",
+                                    "declarations":  45
+                                },
+                                {
+                                    "module":  "uxtheme.dll",
+                                    "declarations":  1
+                                },
+                                {
+                                    "module":  "winmm.dll",
+                                    "declarations":  3
+                                },
+                                {
+                                    "module":  "wintrust.dll",
+                                    "declarations":  1
+                                }
+                            ],
+    "selectedNativeImports":  [
+                                  {
+                                      "module":  "kernel32",
+                                      "entryPoint":  "GetProcAddress",
+                                      "token":  "0x06001640",
+                                      "declaringType":  "#=zEmOMz_QhU8nw",
+                                      "method":  "#=zarzGbHcvgmVS",
+                                      "setLastError":  true
+                                  },
+                                  {
+                                      "module":  "kernel32.dll",
+                                      "entryPoint":  "GetModuleHandle",
+                                      "token":  "0x060014e1",
+                                      "declaringType":  "#=zDeYICMt$dEg5Nvv5XZQAHCQ=",
+                                      "method":  "#=zR$rgzJ_YHVmI",
+                                      "setLastError":  false
+                                  },
+                                  {
+                                      "module":  "kernel32.dll",
+                                      "entryPoint":  "GetModuleHandle",
+                                      "token":  "0x060016ef",
+                                      "declaringType":  "#=zFNntqo70yYjByMjArg==",
+                                      "method":  "#=zR$rgzJ_YHVmI",
+                                      "setLastError":  false
+                                  },
+                                  {
+                                      "module":  "kernel32.dll",
+                                      "entryPoint":  "GetProcAddress",
+                                      "token":  "0x060014e0",
+                                      "declaringType":  "#=zDeYICMt$dEg5Nvv5XZQAHCQ=",
+                                      "method":  "#=zarzGbHcvgmVS",
+                                      "setLastError":  true
+                                  },
+                                  {
+                                      "module":  "kernel32.dll",
+                                      "entryPoint":  "GetProcAddress",
+                                      "token":  "0x060016ee",
+                                      "declaringType":  "#=zFNntqo70yYjByMjArg==",
+                                      "method":  "#=zarzGbHcvgmVS",
+                                      "setLastError":  true
+                                  },
+                                  {
+                                      "module":  "kernel32.dll",
+                                      "entryPoint":  "QueryPerformanceCounter",
+                                      "token":  "0x06003e64",
+                                      "declaringType":  "#=znWvR_Ghr16Bd_aICu4hV1xU7tWF13$yOiA==",
+                                      "method":  "#=zHUyCYl_NIQVY",
+                                      "setLastError":  false
+                                  },
+                                  {
+                                      "module":  "kernel32.dll",
+                                      "entryPoint":  "QueryPerformanceFrequency",
+                                      "token":  "0x06003e65",
+                                      "declaringType":  "#=znWvR_Ghr16Bd_aICu4hV1xU7tWF13$yOiA==",
+                                      "method":  "#=zdfF3pu1eDoOV",
+                                      "setLastError":  false
+                                  },
+                                  {
+                                      "module":  "user32.dll",
+                                      "entryPoint":  "EnumWindows",
+                                      "token":  "0x0600486d",
+                                      "declaringType":  "#=zwCjzHeXWTQWpPdnD9sauHTcK6U$P",
+                                      "method":  "#=zhir88qCfGAjP",
+                                      "setLastError":  false
+                                  },
+                                  {
+                                      "module":  "user32.dll",
+                                      "entryPoint":  "GetClassName",
+                                      "token":  "0x0600486c",
+                                      "declaringType":  "#=zwCjzHeXWTQWpPdnD9sauHTcK6U$P",
+                                      "method":  "#=zbNtuLyE=",
+                                      "setLastError":  true
+                                  },
+                                  {
+                                      "module":  "user32.dll",
+                                      "entryPoint":  "GetLayeredWindowAttributes",
+                                      "token":  "0x060046c0",
+                                      "declaringType":  "#=zv5kxZvtuwX0FTN9D3w==",
+                                      "method":  "#=zBqFPMkTJj$xyT7jkqg==",
+                                      "setLastError":  false
+                                  },
+                                  {
+                                      "module":  "user32.dll",
+                                      "entryPoint":  "GetWindowText",
+                                      "token":  "0x0600486b",
+                                      "declaringType":  "#=zwCjzHeXWTQWpPdnD9sauHTcK6U$P",
+                                      "method":  "#=zYA0HE$4=",
+                                      "setLastError":  true
+                                  },
+                                  {
+                                      "module":  "user32.dll",
+                                      "entryPoint":  "GetWindowThreadProcessId",
+                                      "token":  "0x0600486e",
+                                      "declaringType":  "#=zwCjzHeXWTQWpPdnD9sauHTcK6U$P",
+                                      "method":  "#=zdFLZcNYjBa2a",
+                                      "setLastError":  true
+                                  },
+                                  {
+                                      "module":  "user32.dll",
+                                      "entryPoint":  "SetWindowsHookExA",
+                                      "token":  "0x06001102",
+                                      "declaringType":  "#=z9_o0uskl90TOuiuNiA==",
+                                      "method":  "#=znKQm1btJzJvh",
+                                      "setLastError":  false
+                                  },
+                                  {
+                                      "module":  "wintrust.dll",
+                                      "entryPoint":  "WinVerifyTrust",
+                                      "token":  "0x060035aa",
+                                      "declaringType":  "#=zfzO80LxKCA0mu0lSJQWPLd8=",
+                                      "method":  "#=zYShv1dbPUeoE",
+                                      "setLastError":  false
+                                  }
+                              ],
+    "negativeNativeApiQueries":  [
+                                     {
+                                         "entryPoint":  "IsDebuggerPresent",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "CheckRemoteDebuggerPresent",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "NtQueryInformationProcess",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "ReadProcessMemory",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "WriteProcessMemory",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "VirtualQuery",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "CreateToolhelp32Snapshot",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "Process32First",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "Process32Next",
+                                         "declared":  false
+                                     },
+                                     {
+                                         "entryPoint":  "GetMessageExtraInfo",
+                                         "declared":  false
+                                     }
+                                 ]
+}

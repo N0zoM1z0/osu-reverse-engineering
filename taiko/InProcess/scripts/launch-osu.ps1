@@ -2,7 +2,7 @@ param(
     [string] $OsuPath = 'C:\Games\osu!\osu!.exe',
     [bool] $Enabled = $false,
     [ValidateRange(1, 100)]
-    [int] $TapMilliseconds = 8,
+    [int] $TapMilliseconds = 30,
     [ValidateRange(-5000, 5000)]
     [int] $OffsetMilliseconds = 0,
     [ValidateRange(10, 1000)]

@@ -15,6 +15,7 @@ win_output="$(wslpath -w "$output_dir")"
 loader="$(wslpath -w "$root_dir/InProcess/Loader/LocalTaikoAgentDomainManager.cs")"
 entry="$(wslpath -w "$root_dir/InProcess/Plugin/Entry.cs")"
 plan="$(wslpath -w "$root_dir/InProcess/Plugin/LivePlanBuilder.cs")"
+timing_policy="$(wslpath -w "$root_dir/InProcess/Plugin/InputTimingPolicy.cs")"
 settings="$(wslpath -w "$root_dir/InProcess/Plugin/AgentSettings.cs")"
 humanizer="$(wslpath -w "$root_dir/InProcess/Plugin/Humanizer.cs")"
 agent="$(wslpath -w "$root_dir/InProcess/Plugin/LiveAgent.cs")"
@@ -28,13 +29,13 @@ metadata_probe="$(wslpath -w "$root_dir/InProcess/TestHost/MetadataProbeProgram.
 "$csc" /nologo /target:library /platform:anycpu /optimize+ \
   /reference:System.Drawing.dll /reference:System.Windows.Forms.dll \
   "/out:$win_output\\LocalTaikoAgent.Plugin.dll" \
-  "$entry" "$plan" "$settings" "$humanizer" "$agent" "$overlay"
+  "$entry" "$plan" "$timing_policy" "$settings" "$humanizer" "$agent" "$overlay"
 "$csc" /nologo /target:exe /platform:x86 /optimize+ \
   "/out:$win_output\\LocalTaikoAgent.PlanTest.exe" \
-  "$plan_test" "$plan" "$settings" "$humanizer"
+  "$plan_test" "$plan" "$timing_policy" "$settings" "$humanizer"
 "$csc" /nologo /target:exe /platform:x86 /optimize+ \
   "/out:$win_output\\LocalTaikoAgent.CorpusTest.exe" \
-  "$corpus_test" "$plan" "$settings" "$humanizer"
+  "$corpus_test" "$plan" "$timing_policy" "$settings" "$humanizer"
 "$csc" /nologo /target:exe /platform:x86 /optimize+ \
   "/out:$win_output\\LocalTaikoAgent.MetadataProbe.exe" "$metadata_probe"
 

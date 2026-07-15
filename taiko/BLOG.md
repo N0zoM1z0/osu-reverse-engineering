@@ -604,11 +604,25 @@ The reference planner first produces semantic strikes:
 - alternating inner keys for drumroll ticks;
 - the four-key cycle for spinner hits.
 
-Only then does it produce physical down/up events. With tap pulse `p`, each key-down at `d_i` wants
-a release:
+Only then does it produce physical down/up events. The portable planner accepts a map-clock pulse
+directly. The live plugin starts from a physical key-hold duration and converts it once for the
+selected clock rate:
 
 $$
-u_i=d_i+p.
+p_{map}=\left\lceil r\,p_{real}\right\rceil,
+\qquad
+r=\begin{cases}
+1.5 & \text{DT or NC},\\
+0.75 & \text{HT},\\
+1 & \text{otherwise}.
+\end{cases}
+$$
+
+With the runtime's `30 ms` physical default, the map-clock pulse is 30, 45, or 23 milliseconds.
+Each key-down at `d_i` then wants a release:
+
+$$
+u_i=d_i+p_{map}.
 $$
 
 The next down on the same physical key at `d_{i+1}` imposes:
@@ -621,7 +635,7 @@ The realized release is:
 
 $$
 u_i'=
-\max\left(d_i+1,\min(d_i+p,d_{i+1}-1)\right).
+\max\left(d_i+1,\min(d_i+p_{map},d_{i+1}-1)\right).
 $$
 
 Ups sort before downs at the same millisecond. Every per-key state stream is validated to alternate
@@ -636,6 +650,18 @@ if (release <= down.Time)
 ```
 
 Source: [`PlayerPlanBuilder.cs`](TaikoBeatmap/PlayerPlanBuilder.cs).
+
+The in-process boundary makes the unit conversion explicit:
+
+```csharp
+double clockRate = InputTimingPolicy.ClockRate(selectedMods);
+int mapTapMilliseconds = InputTimingPolicy.ToMapPulseMilliseconds(
+    physicalTapMilliseconds,
+    selectedMods);
+```
+
+This conversion belongs at the physical/runtime boundary. Circle errors and judgement windows are
+already measured on the gameplay clock and must not be multiplied again.
 
 The split between semantic strike and physical transition proved useful repeatedly. A strong circle
 is one judgement event but two key-downs. A spinner hit is one bonus action with no combo
@@ -654,8 +680,10 @@ the same recovered rules in separate source files:
 | [`InProcess/Plugin/LivePlanBuilder.cs`](InProcess/Plugin/LivePlanBuilder.cs) | .NET Framework 4 | runtime parser and physical plan |
 
 This is not perfect formal independence—the specifications are shared—but it catches accidental
-use of unavailable APIs, integer/cast differences, and planner drift. Across the development
-corpus, both models generated exactly 13,375 semantic strikes from 22 native Taiko maps.
+use of unavailable APIs, integer/cast differences, and planner drift. Across the current 26-map
+development corpus, the portable planner generated 19,616 semantic strikes. The humanized net40
+plan retained 19,611 after its second post-variation drumroll acceptance guard; the five-strike
+difference is the intended consequence of bonus timing variation, not parser drift.
 
 The portable command surface is deliberately small:
 
@@ -667,7 +695,8 @@ dotnet run --project taiko/TaikoBeatmap -- corpus /path/to/Songs
 ```
 
 The synthetic map covers Don, Kat, both strong colors, one drumroll, and one spinner. Additional
-regressions cover the pre-v8 cadence branch and the global hand state after an odd drumroll.
+regressions cover the pre-v8 cadence branch, the global hand state after an odd drumroll, and a
+drumroll tick close enough to consume the first following circle.
 
 ## 12. Entering the process without patching the executable
 
@@ -1369,7 +1398,8 @@ objects=6, strikes=19, transitions=42
 ### 22.2 In-process plan test
 
 The net40 test covers the runtime parser, native strike count, spinner count, clean humanization,
-zero predicted miss, the v7 branch, and exact-input collision metadata.
+zero predicted miss, the v7 branch, exact-input collision metadata, and the modified-OD guard
+which makes drumroll bonuses yield to unresolved circles.
 
 ```text
 TAIKO IN-PROCESS PLAN TEST: PASS
@@ -1381,21 +1411,22 @@ The different strike count is intentional: the portable invocation in the first 
 
 ### 22.3 Corpus
 
-The local corpus contained 22 native Taiko maps:
+The expanded local corpus contained 26 native Taiko maps:
 
 | Metric | Count |
 |---|---:|
-| hit objects | 11,796 |
-| circles | 11,677 |
-| Don circles | 6,680 |
-| Kat circles | 4,997 |
-| strong circles | 1,364 |
+| hit objects | 18,073 |
+| circles | 17,949 |
+| Don circles | 10,063 |
+| Kat circles | 7,886 |
+| strong circles | 1,462 |
 | drumrolls | 85 |
-| spinners | 34 |
-| semantic strikes | 13,375 |
-| standalone transitions | 29,442 |
-| humanized net40 batches | 29,461 |
-| predicted 100s in HUMAN profile | 139 |
+| spinners | 39 |
+| standalone semantic strikes | 19,616 |
+| standalone transitions | 42,120 |
+| humanized net40 strikes | 19,611 |
+| humanized net40 batches | 42,139 |
+| predicted 100s in HUMAN profile | 216 |
 | predicted misses | 0 |
 
 These maps are not a proof over every historical `.osu` file. They are broad enough to catch
@@ -1428,6 +1459,126 @@ The live result matters because it tests boundaries that static parity cannot:
 - internal song-clock behavior;
 - x86 `INPUT` layout and actual scan-code injection;
 - the game's normal Taiko object acceptance.
+
+### 22.6 The eight-millisecond ghost
+
+That first live result also hid a useful trap. Later CLEAN plays under HR/DT produced dozens of
+misses even though the humanizer predicted none, the executor reported `skipped=0`, and scheduler
+lateness remained inside the recovered 100 window. The tempting explanations—wrong OD scaling,
+DT applied twice, or a bad global offset—did not survive contact with the replay.
+
+The local `.osr` files are an unusually good oscilloscope for this boundary. They record the input
+state which osu! actually observed. A privacy-safe parser discarded the player-name field and
+aligned the four recorded replay bits with the same per-hand plan used by the plugin.
+
+| CLEAN run | Score result | Planned downs | Recorded downs | Required edges unmatched |
+|---|---:|---:|---:|---:|
+| Inner Oni, no mods | 1412×300, 0 miss | 1576 | 1576 | 0 |
+| Inner Oni, HR/DT family | 1364×300, 3×100, 45 miss | 1575 | 1554 | 47 |
+| Time Dilation, HR/DT family | 829×300, 11×100, 74 miss | 1053 | 1004 | 70 |
+
+The no-mod FC was exact: every planned physical down had a recorded counterpart. In the HR/DT
+Inner Oni run, the surviving required edges were only `+7 ms` from their objects at the median.
+Edges which vanished had a `21 ms` median delay to the next replay input frame. The frame-gap
+distribution itself was `23 map-ms` at p50 and `30 map-ms` at p99.
+
+The old pulse lasted eight milliseconds on the map clock:
+
+$$
+p_{real}=\frac{8}{1.5}\approx5.3\text{ ms under DT}.
+$$
+
+So `SendInput` could successfully accept both transitions while the game observed neither the
+intermediate pressed state nor a new edge. `skipped=0` was true but weaker than we had treated it:
+it proved executor delivery, not consumer sampling.
+
+This is why the correction uses a rate-invariant `30 ms` physical pulse rather than widening the
+hit window. The latter cannot judge an edge that never existed. The executor also remembers the
+wall-clock tick of each actual down. If a delayed worker pass sees that down and its planned up as
+simultaneously overdue, it defers the release for a sampling guard capped at 20 milliseconds and
+at the pulse's intended physical duration. Dense pulses deliberately clipped by the planner stay
+clipped.
+
+The expanded corpus regression generated both ordinary HUMAN and CLEAN HRDT plans for 26 native
+maps, 18,073 objects, and 19,611 post-arbitration strikes. Every key stream alternated legally and
+ended released; HRDT predicted zero misses, with only one density-clipped pulse in the corpus.
+Replaying the new
+45-map-millisecond DT pulse against the historical frame grids reduced the sampling model's exposed
+circles to zero on both failing maps. That is a strong counterfactual regression, while still being
+careful not to call an offline model a live FC.
+
+The reusable analyzer is
+[`analyze-input-sampling.py`](reverse/scripts/analyze-input-sampling.py), and the compact evidence
+chapter is [Physical input sampling under DT](reverse/analysis/input-sampling-and-clock-rate.md).
+
+### 22.7 The yellow-bar ambush
+
+The corrected physical pulse made the next failure unusually clean. A later HR/DT run on *Time
+Dilation* still produced 13 misses, but the replay contained every required circle edge and every
+matched edge was inside its judgement window. The first seven misses formed a perfect sequence
+inside one yellow drumroll:
+
+| Roll input | Upcoming circle | Lead | Recorded miss |
+|---:|---:|---:|---:|
+| 12,227 | 12,304 | 77 ms | 12,231 |
+| 12,304 | 12,382 | 78 ms | 12,309 |
+| 12,382 | 12,460 | 78 ms | 12,383 |
+| 12,460 | 12,538 | 78 ms | 12,463 |
+| 12,537 | 12,615 | 78 ms | 12,540 |
+| 12,693 | 12,771 | 78 ms | 12,704 |
+| 12,848 | 12,926 | 78 ms | 12,854 |
+
+Those judgement timestamps came from the matching `.osg` score graph. Its header declared 932
+fixed 29-byte snapshots; differencing the six cumulative judgement counters recovered the exact
+map-clock time of each miss. This was a second observability lesson: `.osr` answered whether the
+input existed, while `.osg` answered what that input judged.
+
+The apparently harmless 78 ms lead is outside this HR map's 72 ms 100 window, but inside its
+broader Player press-acceptance window:
+
+$$
+A(8.4)=\left\lfloor
+\operatorname{DifficultyRange}(8.4,200,150,100)
+\right\rfloor=116\text{ ms}.
+$$
+
+The roll's optional Don therefore reached the next ordinary circle first. Wrong colour failed a
+Kat immediately; correct colour still arrived outside the 100 window. The later planned circle
+edge was real, punctual, and useless because the object had already been consumed.
+
+The fix is arbitration, not a title-specific offset. A roll strike `b` yields whenever an
+unresolved circle `c` satisfies
+
+$$
+|b-r_c|\le A(OD')\quad\land\quad b\le d_c,
+$$
+
+where `r_c` is the object's reference time and `d_c` is its last planned physical down. An exact
+same-key/same-time request remains safe because it coalesces into the circle transition. The guard
+runs once on native strikes and again after bonus timing variation.
+
+On the failing map this preserved the whole early roll cadence and the safe 12,771 ms coalescence,
+while removing eight dangerous bonus strikes. The source plan changed from 964 to 956 semantic
+strikes; it did not delete the yellow bar. Across the 26-map corpus, both ordinary and HRDT plans
+retained legal alternating key streams with zero predicted circle misses.
+
+The installed build then supplied the missing live check. With the HR/DT family enabled, native
+planning suppressed the expected eight strikes and the post-humanization pass caught one more
+tick which variation had moved across the 116 ms boundary. The run completed with `skipped=0`.
+The old score graph's seven-event drumroll list became empty, while the new graph recorded 25
+consecutive yellow-bar bonus increments from 10,291 through 12,153 ms and successful judgements
+for every circle in and immediately after the roll.
+
+The final result was `896x300 / 17x100 / 1xmiss`, not an FC. That lone miss was a strong Don more
+than ninety seconds later: its two downs were planned at 104,166/104,170 ms and sampled at
+104,237 ms during the run's isolated lateness peak. It is useful precisely because it keeps the
+claim honest—the drumroll arbitration is live-validated; arbitrary runtime stalls are not solved
+by it.
+
+The reproducible binary decoder is
+[`analyze-score-graph.py`](reverse/scripts/analyze-score-graph.py). The full record layout,
+derivation, and generalized scheduler rule are in
+[Drumroll arbitration near Taiko circles](reverse/analysis/drumroll-circle-arbitration.md).
 
 ## 23. Packaging without packaging the target
 
@@ -1548,3 +1699,5 @@ Four drums were enough. The replay was not.
 - [Native beatmap structure](reverse/analysis/beatmap-format.md)
 - [Auto and Player runtime paths](reverse/analysis/runtime-paths.md)
 - [Judgement mathematics and humanization](reverse/analysis/judgement-and-agent.md)
+- [Physical input sampling under DT](reverse/analysis/input-sampling-and-clock-rate.md)
+- [Drumroll arbitration near Taiko circles](reverse/analysis/drumroll-circle-arbitration.md)

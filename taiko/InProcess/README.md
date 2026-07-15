@@ -131,6 +131,11 @@ The PowerShell launcher can also start enabled:
   -Enabled $true
 ```
 
+`-TapMilliseconds` defaults to `30` and means wall-clock key-hold time. The plugin converts it to
+the gameplay clock when the score is prepared: `30 map-ms` normally, `45 map-ms` under DT/NC, and
+`23 map-ms` under HT. This rate adjustment is required for physical input; the former fixed
+`8 map-ms` pulse could disappear entirely between two DT input frames.
+
 For a read-only score-lifecycle trace, leave Agent disabled and add:
 
 ```powershell
@@ -282,16 +287,29 @@ taiko/artifacts/inprocess/net40/LocalTaikoAgent.MetadataProbe.exe \
   'C:\Games\osu!\osu!.exe'
 ```
 
-The development corpus result was:
+The current development corpus result is:
 
 ```text
-maps=22, objects=11796, strikes=13375, batches=29461,
-predicted-100=139, predicted-miss=0
+maps=26, objects=18073, strikes=19611, batches=42139,
+predicted-100=216, predicted-miss=0, clipped-pulses=11,
+hrdt-batches=39065, hrdt-clipped-pulses=1, hrdt-predicted-miss=0
 ```
 
 The final installed build completed a 658-object Oni map with all 1,534 physical transitions and
 `skipped=0`; the last two complete observations recorded `max-late=19..28ms`. Exact-time
 bonus/circle collisions were coalesced while retaining combo-relevant recovery metadata.
+
+Later replay correlation isolated a separate HR/DT problem which `skipped=0` could not reveal:
+Windows had accepted short down/up pairs, but osu! had not sampled a pressed state. The corrected
+rate-invariant pulse policy, replay evidence, and 26-map HRDT corpus regression are documented in
+[Physical input sampling under DT](../reverse/analysis/input-sampling-and-clock-rate.md).
+
+Long yellow drumrolls have one further Player-path constraint: an optional roll strike inside the
+broader acceptance window of an unresolved circle can consume that circle before its required
+key arrives. The planner suppresses only those unsafe roll strikes, including strikes just before
+the roll end which can reach the first following circle. Safe exact same-key collisions remain
+coalesced. The forensic `.osg` timeline and policy are documented in
+[Drumroll arbitration near Taiko circles](../reverse/analysis/drumroll-circle-arbitration.md).
 
 ## Troubleshooting
 

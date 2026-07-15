@@ -38,7 +38,26 @@ catch/
   reverse/analysis/       conversion, runtime, and generalization research
   docs/                    installation and operator documentation
   BLOG.md                 full research article
+
+reverse/
+  analysis/               cross-ruleset client integrity research
+  artifacts/              hash-locked metadata and IL evidence
+  scripts/                read-only security-surface extractor
+  BLOG.md                 long-form anti-cheat architecture article
 ```
+
+## Client integrity and anti-cheat architecture
+
+The cross-ruleset study reconstructs the trust and consistency pipeline in one pinned osu!stable
+build. It covers Authenticode startup/update validation, obfuscation and VM boundaries, normal-play
+evidence collection, redundant clocks and score state, Flashlight/window/movement signals, local
+validity and finish gates, periodic telemetry, and the boundary between a client submission attempt
+and a server verdict.
+
+The work is static and descriptive. It contains no bypass, patch, forged-payload, or evasion
+procedure. Start with the [cross-ruleset notebook](reverse/README.md), use the evidence-first
+[technical report](reverse/analysis/client-integrity-and-anti-cheat.md), and read
+[The Score Has More Than One Clock](reverse/BLOG.md) for the complete research narrative.
 
 ## Mania
 
@@ -84,7 +103,8 @@ diagrams, equations, and engineering analysis.
 The shared post-play audit is documented separately in
 [Score validity is not submission](taiko/reverse/analysis/submission-path.md). It records the
 client-side validity, finish, login, and worker gates plus an opt-in read-only A/B diagnostic for
-Mania and Taiko.
+Mania and Taiko. The broader trust and integrity context lives in the top-level
+[client-integrity report](reverse/analysis/client-integrity-and-anti-cheat.md).
 
 ## Catch
 

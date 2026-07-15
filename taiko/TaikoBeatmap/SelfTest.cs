@@ -67,6 +67,7 @@ internal static class SelfTest
             "native spinner required hits");
         VerifyLegacyDrumRollCadence();
         VerifyGlobalHandAfterOddDrumRoll();
+        VerifyDrumRollYieldsToUpcomingCircle();
 
         Console.WriteLine("TAIKO SELF-TEST: PASS");
         Console.WriteLine($"objects={beatmap.HitObjects.Count}, strikes={plan.Strikes.Count}, transitions={plan.Transitions.Count}");
@@ -163,6 +164,59 @@ internal static class SelfTest
         var plan = PlayerPlanBuilder.Build(document);
         var required = plan.Strikes.Single(strike => strike.RequiredForCombo);
         AssertKeys(required, TaikoKey.InnerLeft);
+    }
+
+    private static void VerifyDrumRollYieldsToUpcomingCircle()
+    {
+        var roll = new TaikoHitObject
+        {
+            Kind = TaikoObjectKind.DrumRoll,
+            StartTime = 700,
+            EndTime = 950,
+            RawType = 2,
+            HitSound = 0,
+            SourceLine = 1,
+            BeatLength = 400,
+            SliderVelocityMultiplier = 1
+        };
+        var circle = new TaikoHitObject
+        {
+            Kind = TaikoObjectKind.Circle,
+            StartTime = 1000,
+            EndTime = 1000,
+            RawType = 1,
+            HitSound = 8,
+            SourceLine = 2,
+            Colour = TaikoColour.Kat
+        };
+        var document = new TaikoBeatmapDocument
+        {
+            Path = "roll-circle-guard.osu",
+            FormatVersion = 14,
+            Mode = 1,
+            OverallDifficulty = 5,
+            SliderMultiplier = 1.4,
+            SliderTickRate = 1,
+            Artist = "",
+            Title = "",
+            Creator = "",
+            Version = "",
+            TimingPoints = Array.Empty<TaikoTimingPoint>(),
+            HitObjects = new[] { roll, circle }
+        };
+        var plan = PlayerPlanBuilder.Build(
+            document,
+            drumRollIntervalMilliseconds: 100);
+        var rollTimes = plan.Strikes
+            .Where(strike => strike.SourceKind == TaikoObjectKind.DrumRoll)
+            .Select(strike => strike.Time)
+            .ToList();
+        Assert(rollTimes.SequenceEqual(new[] { 700, 800 }),
+            "drumroll strikes inside the next circle acceptance window are suppressed");
+        Assert(PlayerPlanBuilder.CalculateCirclePressAcceptanceWindow(
+            6,
+            TaikoGameplayModifiers.HardRock) == 116,
+            "HR circle press-acceptance window");
     }
 
     private static void Assert(bool condition, string label)

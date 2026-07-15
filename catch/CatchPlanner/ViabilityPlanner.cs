@@ -23,21 +23,13 @@ public static class ViabilityPlanner
         var constraints = BuildConstraints(conversion, options);
         var effectiveWindows = constraints.Select(constraint => constraint.ObjectWindow).ToArray();
         var objectsById = conversion.Objects.ToDictionary(hitObject => hitObject.Id);
-
-        for (var index = 1; index < constraints.Count; index++)
-        {
-            var targetId = constraints[index].ForcedHyperTargetObjectId;
-            if (targetId is null)
-                continue;
-            var targetX = objectsById[targetId.Value].X;
-            effectiveWindows[index] = effectiveWindows[index].Intersect(Interval.Point(targetX));
-            EnsureNotEmpty(effectiveWindows[index], constraints[index], "hyperdash target centre is outside a simultaneous-object window");
-        }
+        LinkHyperDashConstraints(constraints, objectsById, effectiveWindows);
 
         var backward = PropagateBackward(constraints, effectiveWindows);
         var reachable = PropagateForward(constraints, backward);
         var positions = SelectFeasibleTrajectory(constraints, backward, reachable);
         SmoothTrajectory(constraints, reachable, positions, options);
+        ProjectHyperDashSegments(constraints, objectsById, effectiveWindows, positions);
         VerifyTrajectory(constraints, effectiveWindows, positions);
 
         var waypoints = constraints.Select((constraint, index) => new CatchWaypoint
@@ -47,7 +39,16 @@ public static class ViabilityPlanner
             ViableWindow = reachable[index],
             ObjectWindow = constraint.ObjectWindow,
             IsSyntheticStart = constraint.IsSyntheticStart,
-            ArrivedByHyperDash = constraint.ForcedHyperTargetObjectId is not null,
+            ArrivedByHyperDash = constraint.HyperSegmentTargetObjectId is not null,
+            HyperSegmentSourceConstraintIndex = constraint.HyperSegmentSourceConstraintIndex,
+            HyperSegmentTargetObjectId = constraint.HyperSegmentTargetObjectId,
+            HyperTargetX = constraint.HyperSegmentTargetObjectId is { } segmentTargetId
+                ? objectsById[segmentTargetId].X
+                : 0,
+            OutgoingHyperTargetObjectId = constraint.OutgoingHyperTargetObjectId,
+            OutgoingHyperTargetX = constraint.OutgoingHyperTargetObjectId is { } outgoingTargetId
+                ? objectsById[outgoingTargetId].X
+                : 0,
             ObjectIds = constraint.ObjectIds
         }).ToList();
         var controls = BuildControls(waypoints);
@@ -159,25 +160,95 @@ public static class ViabilityPlanner
             constraints.Add(constraint);
         }
 
-        var objectById = conversion.Objects.ToDictionary(hitObject => hitObject.Id);
+        return constraints;
+    }
+
+    private static void LinkHyperDashConstraints(
+        IReadOnlyList<CatchConstraint> constraints,
+        IReadOnlyDictionary<int, ConvertedCatchObject> objectsById,
+        Interval[] effectiveWindows)
+    {
+        var constraintByObjectId = new Dictionary<int, int>();
         for (var index = 1; index < constraints.Count; index++)
         {
-            var currentIds = constraints[index].ObjectIds.ToHashSet();
+            foreach (var objectId in constraints[index].ObjectIds)
+                constraintByObjectId[objectId] = index;
+        }
+
+        for (var sourceIndex = 1; sourceIndex < constraints.Count; sourceIndex++)
+        {
             int? targetId = null;
-            foreach (var previousId in constraints[index - 1].ObjectIds)
+            foreach (var sourceId in constraints[sourceIndex].ObjectIds)
             {
-                if (!objectById.TryGetValue(previousId, out var previous)
-                    || previous.HyperDashTargetId is not { } candidate
-                    || !currentIds.Contains(candidate))
+                if (!objectsById.TryGetValue(sourceId, out var source)
+                    || source.HyperDashTargetId is not { } candidate)
                 {
                     continue;
                 }
+                if (targetId is not null && targetId != candidate)
+                    throw new InvalidOperationException($"Multiple hyperdash targets leave the constraint at {constraints[sourceIndex].Time}ms.");
                 targetId = candidate;
-                break;
             }
-            constraints[index].ForcedHyperTargetObjectId = targetId;
+            if (targetId is null)
+                continue;
+            if (!objectsById.TryGetValue(targetId.Value, out var target)
+                || !constraintByObjectId.TryGetValue(targetId.Value, out var targetIndex)
+                || targetIndex <= sourceIndex)
+            {
+                throw new InvalidOperationException($"Hyperdash target {targetId.Value} is not a later hard constraint.");
+            }
+
+            constraints[sourceIndex].OutgoingHyperTargetObjectId = targetId;
+            constraints[targetIndex].ForcedHyperTargetObjectId = targetId;
+
+            var arrivalTime = Math.Max(constraints[sourceIndex].Time + 1.0,
+                target.Time - HyperArrivalLead);
+            var postArrivalReachable = Interval.Point(target.X);
+            var postArrivalTime = arrivalTime;
+            for (var index = sourceIndex + 1; index <= targetIndex; index++)
+            {
+                if (constraints[index].Time + Epsilon < arrivalTime)
+                    continue;
+                var delta = constraints[index].Time - postArrivalTime;
+                postArrivalReachable = effectiveWindows[index].Intersect(
+                    postArrivalReachable.Expand(DashSpeed * delta));
+                EnsureNotEmpty(postArrivalReachable, constraints[index],
+                    "post-arrival hyperdash departure cannot remain inside object windows");
+                postArrivalTime = constraints[index].Time;
+            }
+            effectiveWindows[targetIndex] = postArrivalReachable;
+
+            for (var index = sourceIndex + 1; index <= targetIndex; index++)
+            {
+                if (constraints[index].HyperSegmentTargetObjectId is { } existing
+                    && existing != targetId.Value)
+                {
+                    throw new InvalidOperationException($"Overlapping hyperdash segments meet at {constraints[index].Time}ms.");
+                }
+                constraints[index].HyperSegmentTargetObjectId = targetId;
+                constraints[index].HyperSegmentSourceConstraintIndex = sourceIndex;
+            }
+
+            var sourceWindow = effectiveWindows[sourceIndex];
+            var travelDuration = arrivalTime - constraints[sourceIndex].Time;
+            for (var index = sourceIndex + 1; index <= targetIndex; index++)
+            {
+                if (constraints[index].Time + Epsilon >= arrivalTime)
+                    continue;
+                var amount = Math.Clamp(
+                    (constraints[index].Time - constraints[sourceIndex].Time) / travelDuration,
+                    0,
+                    1);
+                var sourceWeight = 1 - amount;
+                var requiredSourceWindow = new Interval(
+                    (effectiveWindows[index].Min - amount * target.X) / sourceWeight,
+                    (effectiveWindows[index].Max - amount * target.X) / sourceWeight);
+                sourceWindow = sourceWindow.Intersect(requiredSourceWindow);
+            }
+            effectiveWindows[sourceIndex] = sourceWindow;
+            EnsureNotEmpty(sourceWindow, constraints[sourceIndex],
+                "no source position keeps the complete hyperdash segment inside its object windows");
         }
-        return constraints;
     }
 
     private static Interval[] PropagateBackward(
@@ -190,7 +261,7 @@ public static class ViabilityPlanner
 
         for (var index = constraints.Count - 2; index >= 0; index--)
         {
-            if (constraints[index + 1].ForcedHyperTargetObjectId is not null)
+            if (constraints[index + 1].HyperSegmentTargetObjectId is not null)
             {
                 // stable computes the boost from the actual catcher position and
                 // remaining target time. Holding dash therefore guarantees arrival
@@ -219,7 +290,7 @@ public static class ViabilityPlanner
 
         for (var index = 1; index < constraints.Count; index++)
         {
-            if (constraints[index].ForcedHyperTargetObjectId is not null)
+            if (constraints[index].HyperSegmentTargetObjectId is not null)
             {
                 forward[index] = backward[index];
             }
@@ -243,7 +314,7 @@ public static class ViabilityPlanner
         for (var index = 1; index < constraints.Count; index++)
         {
             Interval available;
-            if (constraints[index].ForcedHyperTargetObjectId is not null)
+            if (constraints[index].HyperSegmentTargetObjectId is not null)
             {
                 available = backward[index];
             }
@@ -276,19 +347,16 @@ public static class ViabilityPlanner
         {
             for (var index = start; index != endExclusive; index += step)
             {
-                if (index <= 0 || constraints[index].ForcedHyperTargetObjectId is not null)
+                if (index <= 0 || constraints[index].HyperSegmentTargetObjectId is not null)
                     continue;
 
                 var allowed = reachable[index];
-                if (constraints[index].ForcedHyperTargetObjectId is null)
-                {
-                    var previousDelta = constraints[index].Time - constraints[index - 1].Time;
-                    allowed = allowed.Intersect(new Interval(
-                        positions[index - 1] - DashSpeed * previousDelta,
-                        positions[index - 1] + DashSpeed * previousDelta));
-                }
+                var previousDelta = constraints[index].Time - constraints[index - 1].Time;
+                allowed = allowed.Intersect(new Interval(
+                    positions[index - 1] - DashSpeed * previousDelta,
+                    positions[index - 1] + DashSpeed * previousDelta));
                 if (index + 1 < constraints.Count
-                    && constraints[index + 1].ForcedHyperTargetObjectId is null)
+                    && constraints[index + 1].HyperSegmentTargetObjectId is null)
                 {
                     var nextDelta = constraints[index + 1].Time - constraints[index].Time;
                     allowed = allowed.Intersect(new Interval(
@@ -325,6 +393,79 @@ public static class ViabilityPlanner
         }
     }
 
+    private static void ProjectHyperDashSegments(
+        IReadOnlyList<CatchConstraint> constraints,
+        IReadOnlyDictionary<int, ConvertedCatchObject> objectsById,
+        IReadOnlyList<Interval> effectiveWindows,
+        double[] positions)
+    {
+        for (var sourceIndex = 1; sourceIndex < constraints.Count; sourceIndex++)
+        {
+            if (constraints[sourceIndex].OutgoingHyperTargetObjectId is not { } targetId)
+                continue;
+            var target = objectsById[targetId];
+            var arrivalTime = Math.Max(constraints[sourceIndex].Time + 1.0,
+                target.Time - HyperArrivalLead);
+            var travelDuration = arrivalTime - constraints[sourceIndex].Time;
+            var postArrivalIndexes = new List<int>();
+            for (var index = sourceIndex + 1;
+                 index < constraints.Count && constraints[index].HyperSegmentSourceConstraintIndex == sourceIndex;
+                 index++)
+            {
+                if (constraints[index].Time + Epsilon >= arrivalTime)
+                {
+                    postArrivalIndexes.Add(index);
+                    continue;
+                }
+                var amount = Math.Clamp(
+                    (constraints[index].Time - constraints[sourceIndex].Time) / travelDuration,
+                    0,
+                    1);
+                positions[index] = positions[sourceIndex]
+                    + (target.X - positions[sourceIndex]) * amount;
+                EnsureContains(effectiveWindows[index], positions[index], constraints[index],
+                    "projected hyperdash trajectory left an object window");
+            }
+
+            if (postArrivalIndexes.Count == 0)
+                throw new InvalidOperationException(
+                    $"Hyperdash segment from {constraints[sourceIndex].Time}ms has no target constraint.");
+
+            var postBackward = new Interval[postArrivalIndexes.Count];
+            var last = postArrivalIndexes.Count - 1;
+            var targetIndex = postArrivalIndexes[last];
+            postBackward[last] = effectiveWindows[targetIndex].Intersect(Interval.Point(positions[targetIndex]));
+            EnsureNotEmpty(postBackward[last], constraints[targetIndex],
+                "selected hyperdash departure target left its reachable window");
+            for (var post = last - 1; post >= 0; post--)
+            {
+                var index = postArrivalIndexes[post];
+                var nextIndex = postArrivalIndexes[post + 1];
+                var delta = constraints[nextIndex].Time - constraints[index].Time;
+                postBackward[post] = effectiveWindows[index].Intersect(
+                    postBackward[post + 1].Expand(DashSpeed * delta));
+                EnsureNotEmpty(postBackward[post], constraints[index],
+                    "post-arrival hyperdash path cannot reach the selected target position");
+            }
+
+            var previousTime = arrivalTime;
+            var previousX = target.X;
+            for (var post = 0; post < postArrivalIndexes.Count; post++)
+            {
+                var index = postArrivalIndexes[post];
+                var delta = constraints[index].Time - previousTime;
+                var available = postBackward[post].Intersect(new Interval(
+                    previousX - DashSpeed * delta,
+                    previousX + DashSpeed * delta));
+                EnsureNotEmpty(available, constraints[index],
+                    "post-arrival hyperdash path is unreachable from the target centre");
+                positions[index] = available.Clamp(constraints[index].PreferredX);
+                previousTime = constraints[index].Time;
+                previousX = positions[index];
+            }
+        }
+    }
+
     private static void VerifyTrajectory(
         IReadOnlyList<CatchConstraint> constraints,
         IReadOnlyList<Interval> effectiveWindows,
@@ -334,7 +475,7 @@ public static class ViabilityPlanner
         {
             if (!effectiveWindows[index].Contains(positions[index], 1e-5))
                 throw new InvalidOperationException($"Trajectory left object window at {constraints[index].Time}ms.");
-            if (index == 0 || constraints[index].ForcedHyperTargetObjectId is not null)
+            if (index == 0 || constraints[index].HyperSegmentTargetObjectId is not null)
                 continue;
             var distance = Math.Abs(positions[index] - positions[index - 1]);
             var available = constraints[index].Time - constraints[index - 1].Time;
@@ -350,72 +491,120 @@ public static class ViabilityPlanner
         {
             var previous = waypoints[index - 1];
             var current = waypoints[index];
-            var duration = current.Time - previous.Time;
-            var displacement = current.X - previous.X;
+            if (current.ArrivedByHyperDash)
+            {
+                var sourceIndex = current.HyperSegmentSourceConstraintIndex;
+                if (sourceIndex != index - 1)
+                    throw new InvalidOperationException($"Hyperdash segment begins without its source at {current.Time}ms.");
+                var targetIndex = index;
+                while (targetIndex + 1 < waypoints.Count
+                    && waypoints[targetIndex + 1].HyperSegmentSourceConstraintIndex == sourceIndex)
+                {
+                    targetIndex++;
+                }
+                var source = waypoints[sourceIndex];
+                var target = waypoints[targetIndex];
+                var targetCentre = target.HyperTargetX;
+                var hyperDisplacement = targetCentre - source.X;
+                var hyperDistance = Math.Abs(hyperDisplacement);
+                var travelEnd = Math.Max(source.Time + 1.0, target.Time - HyperArrivalLead);
+                if (hyperDistance <= Epsilon)
+                {
+                    AddPhase(source.Time, travelEnd, source.X, targetCentre, CatchInputState.Idle, 0);
+                }
+                else
+                {
+                    AddPhase(
+                        source.Time,
+                        travelEnd,
+                        source.X,
+                        targetCentre,
+                        hyperDisplacement < 0 ? CatchInputState.HyperDashLeft : CatchInputState.HyperDashRight,
+                        hyperDistance / Math.Max(1, travelEnd - source.Time));
+                }
+
+                var departureTime = travelEnd;
+                var departureX = targetCentre;
+                for (var departureIndex = index; departureIndex <= targetIndex; departureIndex++)
+                {
+                    var departure = waypoints[departureIndex];
+                    if (departure.Time + Epsilon < travelEnd)
+                        continue;
+                    AddOrdinaryPhases(
+                        departureTime,
+                        departure.Time,
+                        departureX,
+                        departure.X);
+                    departureTime = departure.Time;
+                    departureX = departure.X;
+                }
+                index = targetIndex;
+                continue;
+            }
+            AddOrdinaryPhases(
+                previous.Time,
+                current.Time,
+                previous.X,
+                current.X);
+        }
+        return controls;
+
+        void AddOrdinaryPhases(
+            double startTime,
+            double endTime,
+            double startX,
+            double endX)
+        {
+            var duration = endTime - startTime;
+            var displacement = endX - startX;
             var distance = Math.Abs(displacement);
             if (duration <= Epsilon)
             {
                 if (distance > Epsilon)
-                    throw new InvalidOperationException($"Non-zero movement at equal timestamps ({current.Time}ms).");
-                continue;
+                    throw new InvalidOperationException($"Non-zero movement at equal timestamps ({endTime}ms).");
+                return;
             }
 
             if (distance <= Epsilon)
             {
-                AddPhase(previous.Time, current.Time, previous.X, current.X, CatchInputState.Idle, 0);
-                continue;
+                AddPhase(startTime, endTime, startX, endX, CatchInputState.Idle, 0);
+                return;
             }
 
             var direction = Math.Sign(displacement);
-            if (current.ArrivedByHyperDash)
-            {
-                var travelDuration = Math.Max(1, duration - HyperArrivalLead);
-                var travelEnd = Math.Min(current.Time, previous.Time + travelDuration);
-                AddPhase(
-                    previous.Time,
-                    travelEnd,
-                    previous.X,
-                    current.X,
-                    direction < 0 ? CatchInputState.HyperDashLeft : CatchInputState.HyperDashRight,
-                    distance / Math.Max(1, travelEnd - previous.Time));
-                AddPhase(travelEnd, current.Time, current.X, current.X, CatchInputState.Idle, 0);
-                continue;
-            }
-
             if (distance <= WalkSpeed * duration + Epsilon)
             {
                 var walkDuration = distance / WalkSpeed;
-                var movementStart = current.Time - walkDuration;
-                AddPhase(previous.Time, movementStart, previous.X, previous.X, CatchInputState.Idle, 0);
+                var movementStart = endTime - walkDuration;
+                AddPhase(startTime, movementStart, startX, startX, CatchInputState.Idle, 0);
                 AddPhase(
                     movementStart,
-                    current.Time,
-                    previous.X,
-                    current.X,
+                    endTime,
+                    startX,
+                    endX,
                     direction < 0 ? CatchInputState.WalkLeft : CatchInputState.WalkRight,
                     WalkSpeed);
-                continue;
+                return;
             }
 
             var dashDuration = Math.Clamp(2 * distance - duration, 0, duration);
             var walkDurationMixed = duration - dashDuration;
-            var afterWalkX = previous.X + direction * WalkSpeed * walkDurationMixed;
+            var afterWalkX = startX + direction * WalkSpeed * walkDurationMixed;
             AddPhase(
-                previous.Time,
-                previous.Time + walkDurationMixed,
-                previous.X,
+                startTime,
+                startTime + walkDurationMixed,
+                startX,
                 afterWalkX,
                 direction < 0 ? CatchInputState.WalkLeft : CatchInputState.WalkRight,
                 WalkSpeed);
             AddPhase(
-                previous.Time + walkDurationMixed,
-                current.Time,
+                startTime + walkDurationMixed,
+                endTime,
                 afterWalkX,
-                current.X,
+                endX,
                 direction < 0 ? CatchInputState.DashLeft : CatchInputState.DashRight,
                 DashSpeed);
         }
-        return controls;
 
         void AddPhase(
             double startTime,
@@ -502,6 +691,18 @@ public static class ViabilityPlanner
     private static void EnsureNotEmpty(Interval interval, CatchConstraint constraint, string reason)
     {
         if (!interval.IsEmpty)
+            return;
+        throw new InvalidOperationException(
+            $"Catch plan is infeasible at {constraint.Time}ms (constraint #{constraint.Index}): {reason}.");
+    }
+
+    private static void EnsureContains(
+        Interval interval,
+        double value,
+        CatchConstraint constraint,
+        string reason)
+    {
+        if (interval.Contains(value, 1e-5))
             return;
         throw new InvalidOperationException(
             $"Catch plan is infeasible at {constraint.Time}ms (constraint #{constraint.Index}): {reason}.");

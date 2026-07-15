@@ -94,6 +94,18 @@ circle. This retains the recovered `<30 ms` strong-note invariant.
 
 ## Execution loop
 
+The launcher's tap setting is a physical key-hold duration, not a map-clock duration. For gameplay
+clock rate `r`, the plan uses
+
+$$
+p_{map}=\left\lceil r\,p_{real}\right\rceil.
+$$
+
+The `30 ms` default therefore remains physically stable under DT/NC and HT. This matters because
+the replay recorder showed that the former fixed `8 map-ms` pulse became only `5.3 ms` in DT and
+could begin and end between two input updates. The replay correlation and rate-policy validation
+are recorded in [Physical input sampling under DT](input-sampling-and-clock-rate.md).
+
 ```mermaid
 stateDiagram-v2
     [*] --> Player: plugin loaded, Agent off
@@ -107,6 +119,8 @@ stateDiagram-v2
 ```
 
 If a scheduler stall makes a circle late, the agent may rescue it only while the current song
-clock remains inside `W_safe`; the rescued key is held for a small real input pulse. Expired bonus
-ticks are skipped, and an expired combo circle is reported rather than disguised. Every stop path
-releases all keys known to the agent.
+clock remains inside `W_safe`; the rescued key is held for a bounded real input pulse. A late
+worker pass which sees both down and up overdue defers the release for a sampling guard capped by
+both `20 ms` and the planned pulse's physical duration. Expired bonus ticks are skipped, and an
+expired combo circle is reported rather than disguised. Every stop path releases all keys known to
+the agent.

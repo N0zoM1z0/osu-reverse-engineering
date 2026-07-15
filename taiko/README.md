@@ -33,9 +33,10 @@ taiko/scripts/verify-corpus.sh /path/to/osu/Songs
 taiko/InProcess/scripts/build-net40.sh
 ```
 
-The standalone and .NET 4 planners intentionally share the recovered rules. For the local corpus
-used during development, both produce exactly `13,375` physical strikes across 22 native Taiko
-maps.
+The standalone and .NET 4 planners intentionally share the recovered rules. The current local
+corpus contains 26 native Taiko maps and 18,073 objects. Its readable planner produces 19,616
+semantic strikes; the humanized net40 plan retains 19,611 after a second post-variation drumroll
+acceptance guard.
 
 ## Runtime result
 
@@ -43,6 +44,19 @@ The packaged build was exercised inside the fingerprinted client on a 658-object
 armed in normal Player mode, resolved the current four Taiko bindings, emitted every planned
 scan-code transition through `SendInput`, and completed with `skipped=0`. The last two complete
 observations recorded 19–28 ms maximum scheduler lateness.
+
+A later HR/DT investigation found that scheduler counters alone were insufficient: a fixed
+`8 map-ms` down/up pulse could be accepted by `SendInput` yet vanish between two osu! input frames.
+The runtime now treats the default `30 ms` pulse as physical time and converts it by the selected
+clock rate (`45 map-ms` in DT/NC). The read-only replay evidence and regression method are in
+[Physical input sampling under DT](reverse/analysis/input-sampling-and-clock-rate.md).
+
+A later yellow-drumroll failure had a different signature: all combo edges were present, but
+optional roll strikes 77–78 ms before nearby circles reached the client's broader press-acceptance
+window and consumed those circles first. The planner now arbitrates drumroll bonuses against
+unresolved combo circles using the modified-OD acceptance window. The score-graph evidence and
+general scheduling rule are in
+[Drumroll arbitration near Taiko circles](reverse/analysis/drumroll-circle-arbitration.md).
 
 This is the architectural distinction the module is built to preserve:
 

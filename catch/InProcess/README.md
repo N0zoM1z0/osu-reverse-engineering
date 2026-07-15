@@ -19,7 +19,7 @@ The build uses the Windows x86 .NET Framework 4 compiler. The runtime planner te
 
 ```text
 CATCH NET40 PLANNER: PASS
-objects=7, constraints=7, phases=20, hyper=1
+objects=8, constraints=8, phases=20, hyper=1
 ```
 
 ## Install and launch
