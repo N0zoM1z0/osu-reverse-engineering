@@ -111,7 +111,7 @@ namespace LocalTaikoAgent.Plugin
             LiveTaikoPlan source,
             AgentOptionsSnapshot options,
             int selectedMods,
-            int tapMilliseconds,
+            int mapTapMilliseconds,
             int? seedOverride)
         {
             if (source == null) throw new ArgumentNullException("source");
@@ -289,7 +289,11 @@ namespace LocalTaikoAgent.Plugin
                 splitStrongNotes++;
             }
 
-            LiveTaikoPlan plan = LivePlanBuilder.Rebuild(source, strikes, tapMilliseconds);
+            LiveTaikoPlan plan = LivePlanBuilder.Rebuild(
+                source,
+                strikes,
+                mapTapMilliseconds,
+                selectedMods);
             int minimumOffset = Int32.MaxValue;
             int maximumOffset = Int32.MinValue;
             int earlyCount = 0;

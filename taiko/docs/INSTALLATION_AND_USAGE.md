@@ -313,7 +313,9 @@ dotnet run --project taiko/TaikoBeatmap -- \
 ```
 
 `--roll-ms 0` and `--spinner-ms 0` select the recovered native cadence. Nonzero overrides are
-useful for controlled experiments.
+useful for controlled experiments. In this standalone data model, `--tap-ms` is expressed directly
+in map time. The live plugin's launcher option is instead a physical duration and is adjusted for
+DT/NC or HT.
 
 This command generates data only. It does not start osu!, inject input, or access an account.
 
@@ -342,7 +344,8 @@ This test also verifies:
 
 - zero predicted miss in CLEAN mode;
 - pre-v8 `SliderTickRate=1.5` behavior;
-- promotion of combo metadata when a bonus tick collides with a circle down.
+- promotion of combo metadata when a bonus tick collides with a circle down;
+- modified-OD arbitration when a drumroll tick can reach an unresolved circle.
 
 ### 11.2 Local Songs corpus
 
@@ -359,11 +362,12 @@ taiko/artifacts/inprocess/net40/LocalTaikoAgent.CorpusTest.exe \
   'C:\Games\osu!\Songs'
 ```
 
-The development corpus produced:
+The current development corpus produced:
 
 ```text
-maps=22, objects=11796, strikes=13375, batches=29461,
-predicted-100=139, predicted-miss=0
+maps=26, objects=18073, strikes=19611, batches=42139,
+predicted-100=216, predicted-miss=0, clipped-pulses=11,
+hrdt-batches=39065, hrdt-clipped-pulses=1, hrdt-predicted-miss=0
 ```
 
 Your count will differ with another Songs directory. A failure is actionable: inspect the named
@@ -488,7 +492,7 @@ Set-Location 'C:\Games\osu!'
 .\LocalTaikoAgent\launch-osu.ps1 `
   -OsuPath '.\osu!.exe' `
   -Enabled $false `
-  -TapMilliseconds 8 `
+  -TapMilliseconds 30 `
   -OffsetMilliseconds 0 `
   -MaximumLatenessMilliseconds 70 `
   -ClockStallMilliseconds 250 `
@@ -645,6 +649,10 @@ The decisive architecture evidence is the combination of:
 - no Auto frame or replay list;
 - the first real `SendInput` transition.
 
+The plan line also reports `mods`, `clock-rate`, and a pulse such as
+`30ms-real/45ms-map`. Under DT/NC the two numbers should differ by `1.5x`; under HT the map pulse
+is `0.75x` the requested physical duration, rounded upward.
+
 ### 19.1 Humanizer summary
 
 Example fields:
@@ -669,6 +677,7 @@ Example fields:
 | `transitions` | physical inputs actually sent |
 | `skipped` | expired or redundant transitions not sent |
 | `max-late` | largest observed scheduler lateness |
+| `sampling-guard-deferrals` | releases delayed so a late down survives a real input sample |
 | `late-batches` | batches beyond the configured normal threshold |
 | `late-recovery-inputs` | physical inputs sent by bounded recovery |
 
@@ -682,7 +691,7 @@ The PowerShell launcher maps options to child-process environment variables:
 | PowerShell option | Environment | Default | Purpose |
 |---|---|---:|---|
 | `-Enabled` | `TAIKO_AGENT_ENABLED` | false | initial control state |
-| `-TapMilliseconds` | `TAIKO_AGENT_TAP_MS` | 8 | physical pulse width |
+| `-TapMilliseconds` | `TAIKO_AGENT_TAP_MS` | 30 | physical key-hold duration |
 | `-OffsetMilliseconds` | `TAIKO_AGENT_OFFSET_MS` | 0 | global schedule offset |
 | `-MaximumLatenessMilliseconds` | `TAIKO_AGENT_MAX_LATE_MS` | 70 | recovery threshold |
 | `-ClockStallMilliseconds` | `TAIKO_AGENT_CLOCK_STALL_MS` | 250 | unexplained stall timeout |
@@ -692,9 +701,18 @@ These are diagnostic controls. The overlay's timing bias is the preferred musica
 control; launcher offset shifts the entire executor schedule and is mainly useful for measuring a
 systematic environment delay.
 
+The live planner converts the physical pulse once:
+
+$$
+p_{map}=\left\lceil p_{real}\,r\right\rceil,
+\qquad r\in\{0.75,1,1.5\}.
+$$
+
 Do not reduce pulse width to one millisecond simply because built-in Auto uses tightly spaced
 replay states. A replay consumer observes timestamped state directly; a physical key poll can miss
-an extremely short pulse between updates.
+an extremely short pulse between updates. The historical fixed `8 map-ms` pulse became only
+`5.3 ms` in DT and was confirmed to lose complete key edges between replay input frames. See
+[Physical input sampling under DT](../reverse/analysis/input-sampling-and-clock-rate.md).
 
 ## 21. Troubleshooting
 
@@ -706,6 +724,14 @@ Close it normally. The launcher intentionally does not terminate an existing pro
 
 The executable is unsupported. Do not bypass the check. Repeat the metadata and IL recovery for
 the new binary before changing the manifest or runtime tokens.
+
+### CLEAN or HR/DT play has many unexplained misses
+
+Confirm the startup log says `tap=30ms-real` and each plan line reports the expected rate-adjusted
+pulse (`45ms-map` for DT/NC). An old installed `launch-osu.ps1` can still pass the former eight
+millisecond default even when the DLL was rebuilt. Reinstall both the plugin and launcher, then
+compare `required-edges-missing` with the local replay analyzer documented in
+[Physical input sampling under DT](../reverse/analysis/input-sampling-and-clock-rate.md).
 
 ### A score remains local or shows no online result
 

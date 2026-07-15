@@ -52,6 +52,8 @@ public static class PlayerPlanBuilder
             preferLeftHand = !preferLeftHand;
         }
 
+        strikes = ProtectComboCirclesFromDrumRollStrikes(strikes, beatmap, modifiers);
+
         strikes.Sort((left, right) =>
         {
             var byTime = left.Time.CompareTo(right.Time);
@@ -195,11 +197,7 @@ public static class PlayerPlanBuilder
             throw new ArgumentOutOfRangeException(nameof(durationMilliseconds));
         ValidateModifiers(modifiers);
 
-        var effectiveDifficulty = overallDifficulty;
-        if ((modifiers & TaikoGameplayModifiers.Easy) != 0)
-            effectiveDifficulty = Math.Max(0.0, effectiveDifficulty / 2.0);
-        if ((modifiers & TaikoGameplayModifiers.HardRock) != 0)
-            effectiveDifficulty = Math.Min(10.0, effectiveDifficulty * 1.4);
+        var effectiveDifficulty = ModifiedOverallDifficulty(overallDifficulty, modifiers);
 
         var spinsPerSecond = DifficultyRange(effectiveDifficulty, 3.0, 5.0, 7.5);
         var baseRequired = (int)(((float)durationMilliseconds / 1000f) * spinsPerSecond);
@@ -209,6 +207,63 @@ public static class PlayerPlanBuilder
         if ((modifiers & TaikoGameplayModifiers.HalfTime) != 0)
             required = Math.Max(1, (int)(required * 1.5f));
         return required;
+    }
+
+    public static int CalculateCirclePressAcceptanceWindow(
+        double overallDifficulty,
+        TaikoGameplayModifiers modifiers = TaikoGameplayModifiers.None)
+    {
+        ValidateModifiers(modifiers);
+        var effectiveDifficulty = ModifiedOverallDifficulty(overallDifficulty, modifiers);
+        return Math.Max(1, (int)DifficultyRange(effectiveDifficulty, 200.0, 150.0, 100.0));
+    }
+
+    private static List<TaikoStrike> ProtectComboCirclesFromDrumRollStrikes(
+        List<TaikoStrike> strikes,
+        TaikoBeatmapDocument beatmap,
+        TaikoGameplayModifiers modifiers)
+    {
+        var circles = strikes
+            .Where(strike => strike.RequiredForCombo)
+            .OrderBy(strike => strike.Time)
+            .ThenBy(strike => strike.SourceLine)
+            .ToList();
+        if (circles.Count == 0)
+            return strikes;
+
+        var acceptance = CalculateCirclePressAcceptanceWindow(
+            beatmap.OverallDifficulty,
+            modifiers);
+        return strikes.Where(strike =>
+        {
+            if (strike.RequiredForCombo || strike.SourceKind != TaikoObjectKind.DrumRoll)
+                return true;
+            foreach (var circle in circles)
+            {
+                if (circle.Time < strike.Time - acceptance)
+                    continue;
+                if (circle.Time > strike.Time + acceptance)
+                    break;
+                if (strike.Time > circle.Time)
+                    continue;
+                if (strike.Time == circle.Time && strike.Keys.Intersect(circle.Keys).Any())
+                    continue;
+                return false;
+            }
+            return true;
+        }).ToList();
+    }
+
+    private static double ModifiedOverallDifficulty(
+        double overallDifficulty,
+        TaikoGameplayModifiers modifiers)
+    {
+        var effectiveDifficulty = overallDifficulty;
+        if ((modifiers & TaikoGameplayModifiers.Easy) != 0)
+            effectiveDifficulty = Math.Max(0.0, effectiveDifficulty / 2.0);
+        if ((modifiers & TaikoGameplayModifiers.HardRock) != 0)
+            effectiveDifficulty = Math.Min(10.0, effectiveDifficulty * 1.4);
+        return effectiveDifficulty;
     }
 
     private static double DifficultyRange(double difficulty, double minimum, double middle, double maximum)

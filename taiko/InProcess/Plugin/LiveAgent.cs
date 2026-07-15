@@ -54,7 +54,7 @@ namespace LocalTaikoAgent.Plugin
         private readonly MethodInfo bindingGetter;
         private readonly Type bindingEnumType;
         private readonly int processId;
-        private readonly int tapMilliseconds;
+        private readonly int physicalTapMilliseconds;
         private readonly int offsetMilliseconds;
         private readonly int maximumLatenessMilliseconds;
         private readonly int clockStallMilliseconds;
@@ -65,6 +65,8 @@ namespace LocalTaikoAgent.Plugin
         private List<LiveTaikoKeySpec> candidateKeys;
         private HumanizedPlanResult candidateHumanization;
         private AgentOptionsSnapshot candidateOptions;
+        private int candidateMapTapMilliseconds;
+        private double candidateClockRate;
         private int candidateStartedTick;
 
         private object sessionScore;
@@ -72,7 +74,11 @@ namespace LocalTaikoAgent.Plugin
         private List<LiveTaikoKeySpec> sessionKeys;
         private HumanizedPlanResult sessionHumanization;
         private AgentOptionsSnapshot sessionOptions;
+        private int sessionMapTapMilliseconds;
+        private double sessionClockRate;
         private bool[] pressed;
+        private int[] pressedAtTick;
+        private int[] deferredReleaseHoldMilliseconds;
         private int[] rescuedReleaseAt;
         private int nextBatch;
         private int lastClock;
@@ -83,6 +89,7 @@ namespace LocalTaikoAgent.Plugin
         private int maximumObservedLateness;
         private int lateBatches;
         private int lateRecoveryInputs;
+        private int samplingGuardDeferrals;
         private bool firstBatchLogged;
         private bool suspended;
         private int suspendedClock;
@@ -126,13 +133,17 @@ namespace LocalTaikoAgent.Plugin
             ValidateTargets();
 
             processId = System.Diagnostics.Process.GetCurrentProcess().Id;
-            tapMilliseconds = ReadInteger("TAIKO_AGENT_TAP_MS", 8, 1, 100);
+            physicalTapMilliseconds = ReadInteger(
+                "TAIKO_AGENT_TAP_MS",
+                InputTimingPolicy.DefaultPhysicalTapMilliseconds,
+                1,
+                100);
             offsetMilliseconds = ReadInteger("TAIKO_AGENT_OFFSET_MS", 0, -5000, 5000);
             maximumLatenessMilliseconds = ReadInteger("TAIKO_AGENT_MAX_LATE_MS", 70, 10, 1000);
             clockStallMilliseconds = ReadInteger("TAIKO_AGENT_CLOCK_STALL_MS", 250, 100, 5000);
             submissionDiagnostics = ReadBoolean("TAIKO_SUBMISSION_DIAGNOSTICS", false);
-            log("live-agent targets validated; tap=" + tapMilliseconds
-                + "ms, offset=" + offsetMilliseconds
+            log("live-agent targets validated; tap=" + physicalTapMilliseconds
+                + "ms-real, offset=" + offsetMilliseconds
                 + "ms, max-late=" + maximumLatenessMilliseconds
                 + "ms, clock-stall=" + clockStallMilliseconds + "ms"
                 + ", submission-diag=" + (submissionDiagnostics ? "on" : "off"));
@@ -277,12 +288,19 @@ namespace LocalTaikoAgent.Plugin
                 if (String.IsNullOrEmpty(path))
                     throw new InvalidOperationException("current beatmap path is empty");
 
-                LiveTaikoPlan source = LivePlanBuilder.ParseAndBuild(path, tapMilliseconds, selectedMods);
+                double clockRate = InputTimingPolicy.ClockRate(selectedMods);
+                int mapTapMilliseconds = InputTimingPolicy.ToMapPulseMilliseconds(
+                    physicalTapMilliseconds,
+                    selectedMods);
+                LiveTaikoPlan source = LivePlanBuilder.ParseAndBuild(
+                    path,
+                    mapTapMilliseconds,
+                    selectedMods);
                 HumanizedPlanResult humanization = Humanizer.Apply(
                     source,
                     options,
                     selectedMods,
-                    tapMilliseconds,
+                    mapTapMilliseconds,
                     null);
                 List<LiveTaikoKeySpec> keys = ResolveCurrentBindings();
 
@@ -291,6 +309,8 @@ namespace LocalTaikoAgent.Plugin
                 candidateKeys = keys;
                 candidateHumanization = humanization;
                 candidateOptions = options;
+                candidateMapTapMilliseconds = mapTapMilliseconds;
+                candidateClockRate = clockRate;
                 candidateStartedTick = Environment.TickCount;
                 BeginTimerResolution();
 
@@ -301,6 +321,10 @@ namespace LocalTaikoAgent.Plugin
                     + ", spinners=" + source.SpinnerCount + ")"
                     + ", strikes=" + candidatePlan.Strikes.Count
                     + ", batches=" + candidatePlan.Batches.Count
+                    + ", mods=0x" + selectedMods.ToString("X")
+                    + ", clock-rate=" + clockRate.ToString("0.00") + "x"
+                    + ", pulse=" + physicalTapMilliseconds + "ms-real/"
+                        + mapTapMilliseconds + "ms-map"
                     + ", keys=" + DescribeKeys(keys));
                 log("humanization prepared: " + humanization.Describe(options));
                 for (int index = 0; index < candidatePlan.Warnings.Count; index++)
@@ -341,7 +365,11 @@ namespace LocalTaikoAgent.Plugin
             sessionKeys = candidateKeys;
             sessionHumanization = candidateHumanization;
             sessionOptions = candidateOptions;
+            sessionMapTapMilliseconds = candidateMapTapMilliseconds;
+            sessionClockRate = candidateClockRate;
             pressed = new bool[4];
+            pressedAtTick = new int[4];
+            deferredReleaseHoldMilliseconds = new int[4];
             rescuedReleaseAt = new int[] { -1, -1, -1, -1 };
             nextBatch = 0;
             lastClock = clock;
@@ -352,6 +380,7 @@ namespace LocalTaikoAgent.Plugin
             maximumObservedLateness = 0;
             lateBatches = 0;
             lateRecoveryInputs = 0;
+            samplingGuardDeferrals = 0;
             firstBatchLogged = false;
             suspended = false;
             suspendedClock = 0;
@@ -419,6 +448,7 @@ namespace LocalTaikoAgent.Plugin
                 return;
             }
 
+            ReleaseDeferred();
             ReleaseRescued(clock);
             while (nextBatch < sessionPlan.Batches.Count)
             {
@@ -447,6 +477,7 @@ namespace LocalTaikoAgent.Plugin
         {
             bool[] next = (bool[])pressed.Clone();
             List<NativeInput> inputs = new List<NativeInput>();
+            int now = Environment.TickCount;
             for (int index = 0; index < batch.Transitions.Count; index++)
             {
                 LiveTaikoTransition transition = batch.Transitions[index];
@@ -454,6 +485,19 @@ namespace LocalTaikoAgent.Plugin
                     continue;
                 if (next[transition.Key] == transition.IsDown)
                     continue;
+                if (!transition.IsDown)
+                {
+                    int plannedMapHold = Math.Max(1, transition.Time - transition.DownTime);
+                    int guard = InputTimingPolicy.LateSamplingGuardMilliseconds(
+                        physicalTapMilliseconds,
+                        plannedMapHold,
+                        sessionClockRate);
+                    if (ShouldDeferRelease(transition.Key, guard, now))
+                    {
+                        DeferRelease(transition.Key, guard);
+                        continue;
+                    }
+                }
                 inputs.Add(CreateKeyboardInput(sessionKeys[transition.Key], !transition.IsDown));
                 next[transition.Key] = transition.IsDown;
             }
@@ -461,7 +505,7 @@ namespace LocalTaikoAgent.Plugin
             {
                 Send(inputs);
                 transitionsSent += inputs.Count;
-                Array.Copy(next, pressed, pressed.Length);
+                CommitInputState(next, now);
                 LogFirstInput(batch.Time);
             }
         }
@@ -470,6 +514,7 @@ namespace LocalTaikoAgent.Plugin
         {
             List<NativeInput> inputs = new List<NativeInput>();
             bool[] next = (bool[])pressed.Clone();
+            int now = Environment.TickCount;
             for (int index = 0; index < batch.Transitions.Count; index++)
             {
                 LiveTaikoTransition transition = batch.Transitions[index];
@@ -479,6 +524,16 @@ namespace LocalTaikoAgent.Plugin
                         continue;
                     if (next[transition.Key])
                     {
+                        int plannedMapHold = Math.Max(1, transition.Time - transition.DownTime);
+                        int guard = InputTimingPolicy.LateSamplingGuardMilliseconds(
+                            physicalTapMilliseconds,
+                            plannedMapHold,
+                            sessionClockRate);
+                        if (ShouldDeferRelease(transition.Key, guard, now))
+                        {
+                            DeferRelease(transition.Key, guard);
+                            continue;
+                        }
                         inputs.Add(CreateKeyboardInput(sessionKeys[transition.Key], true));
                         next[transition.Key] = false;
                     }
@@ -498,7 +553,8 @@ namespace LocalTaikoAgent.Plugin
                 {
                     inputs.Add(CreateKeyboardInput(sessionKeys[transition.Key], false));
                     next[transition.Key] = true;
-                    rescuedReleaseAt[transition.Key] = checked(clock + Math.Max(4, tapMilliseconds));
+                    rescuedReleaseAt[transition.Key] = checked(
+                        clock + Math.Max(4, sessionMapTapMilliseconds));
                 }
                 else
                 {
@@ -509,7 +565,7 @@ namespace LocalTaikoAgent.Plugin
             {
                 Send(inputs);
                 transitionsSent += inputs.Count;
-                Array.Copy(next, pressed, pressed.Length);
+                CommitInputState(next, now);
                 LogFirstInput(batch.Time);
             }
             // Never perform per-batch file I/O here. A late batch already means the timing
@@ -521,12 +577,23 @@ namespace LocalTaikoAgent.Plugin
         {
             List<NativeInput> releases = new List<NativeInput>();
             List<int> keys = new List<int>();
+            int now = Environment.TickCount;
             for (int key = 0; key < rescuedReleaseAt.Length; key++)
             {
                 if (rescuedReleaseAt[key] < 0 || clock < rescuedReleaseAt[key])
                     continue;
                 if (pressed[key])
                 {
+                    int guard = InputTimingPolicy.LateSamplingGuardMilliseconds(
+                        physicalTapMilliseconds,
+                        sessionMapTapMilliseconds,
+                        sessionClockRate);
+                    if (ShouldDeferRelease(key, guard, now))
+                    {
+                        DeferRelease(key, guard);
+                        rescuedReleaseAt[key] = -1;
+                        continue;
+                    }
                     releases.Add(CreateKeyboardInput(sessionKeys[key], true));
                     keys.Add(key);
                 }
@@ -537,8 +604,79 @@ namespace LocalTaikoAgent.Plugin
                 Send(releases);
                 transitionsSent += releases.Count;
                 for (int index = 0; index < keys.Count; index++)
+                {
                     pressed[keys[index]] = false;
+                    deferredReleaseHoldMilliseconds[keys[index]] = 0;
+                }
             }
+        }
+
+        private void ReleaseDeferred()
+        {
+            if (deferredReleaseHoldMilliseconds == null) return;
+            int now = Environment.TickCount;
+            List<NativeInput> releases = new List<NativeInput>();
+            List<int> keys = new List<int>();
+            for (int key = 0; key < deferredReleaseHoldMilliseconds.Length; key++)
+            {
+                int hold = deferredReleaseHoldMilliseconds[key];
+                if (hold <= 0)
+                    continue;
+                if (!pressed[key])
+                {
+                    deferredReleaseHoldMilliseconds[key] = 0;
+                    continue;
+                }
+                if (ElapsedSince(pressedAtTick[key]) < hold)
+                    continue;
+                releases.Add(CreateKeyboardInput(sessionKeys[key], true));
+                keys.Add(key);
+            }
+            if (releases.Count == 0)
+                return;
+            Send(releases);
+            transitionsSent += releases.Count;
+            for (int index = 0; index < keys.Count; index++)
+            {
+                int key = keys[index];
+                pressed[key] = false;
+                deferredReleaseHoldMilliseconds[key] = 0;
+                rescuedReleaseAt[key] = -1;
+            }
+        }
+
+        private bool ShouldDeferRelease(int key, int holdMilliseconds, int now)
+        {
+            return pressed[key]
+                && holdMilliseconds > 0
+                && unchecked(now - pressedAtTick[key]) < holdMilliseconds;
+        }
+
+        private void DeferRelease(int key, int holdMilliseconds)
+        {
+            if (holdMilliseconds > deferredReleaseHoldMilliseconds[key])
+                deferredReleaseHoldMilliseconds[key] = holdMilliseconds;
+            samplingGuardDeferrals++;
+        }
+
+        private void CommitInputState(bool[] next, int now)
+        {
+            for (int key = 0; key < pressed.Length; key++)
+            {
+                if (next[key] == pressed[key])
+                    continue;
+                if (next[key])
+                {
+                    pressedAtTick[key] = now;
+                    deferredReleaseHoldMilliseconds[key] = 0;
+                }
+                else
+                {
+                    deferredReleaseHoldMilliseconds[key] = 0;
+                    rescuedReleaseAt[key] = -1;
+                }
+            }
+            Array.Copy(next, pressed, pressed.Length);
         }
 
         private void LogFirstInput(int plannedTime)
@@ -593,6 +731,9 @@ namespace LocalTaikoAgent.Plugin
                 + ", transitions=" + transitionsSent
                 + ", skipped=" + transitionsSkipped
                 + ", max-late=" + maximumObservedLateness + "ms"
+                + (samplingGuardDeferrals > 0
+                    ? ", sampling-guard-deferrals=" + samplingGuardDeferrals
+                    : String.Empty)
                 + (lateBatches > 0
                     ? ", late-batches=" + lateBatches
                         + ", late-recovery-inputs=" + lateRecoveryInputs
@@ -602,7 +743,11 @@ namespace LocalTaikoAgent.Plugin
             sessionKeys = null;
             sessionHumanization = null;
             sessionOptions = null;
+            sessionMapTapMilliseconds = 0;
+            sessionClockRate = 0.0;
             pressed = null;
+            pressedAtTick = null;
+            deferredReleaseHoldMilliseconds = null;
             rescuedReleaseAt = null;
             nextBatch = 0;
             suspended = false;
@@ -630,7 +775,13 @@ namespace LocalTaikoAgent.Plugin
             finally
             {
                 for (int key = 0; key < pressed.Length; key++)
+                {
                     pressed[key] = false;
+                    if (deferredReleaseHoldMilliseconds != null)
+                        deferredReleaseHoldMilliseconds[key] = 0;
+                    if (rescuedReleaseAt != null)
+                        rescuedReleaseAt[key] = -1;
+                }
             }
         }
 
@@ -663,6 +814,8 @@ namespace LocalTaikoAgent.Plugin
             candidateKeys = null;
             candidateHumanization = null;
             candidateOptions = null;
+            candidateMapTapMilliseconds = 0;
+            candidateClockRate = 0.0;
             candidateStartedTick = 0;
         }
 
@@ -676,9 +829,16 @@ namespace LocalTaikoAgent.Plugin
 
         private bool HasPendingRescue()
         {
-            if (rescuedReleaseAt == null) return false;
-            for (int index = 0; index < rescuedReleaseAt.Length; index++)
-                if (rescuedReleaseAt[index] >= 0) return true;
+            if (rescuedReleaseAt != null)
+            {
+                for (int index = 0; index < rescuedReleaseAt.Length; index++)
+                    if (rescuedReleaseAt[index] >= 0) return true;
+            }
+            if (deferredReleaseHoldMilliseconds != null)
+            {
+                for (int index = 0; index < deferredReleaseHoldMilliseconds.Length; index++)
+                    if (deferredReleaseHoldMilliseconds[index] > 0) return true;
+            }
             return false;
         }
 

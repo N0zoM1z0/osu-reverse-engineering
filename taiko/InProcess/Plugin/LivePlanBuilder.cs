@@ -58,6 +58,7 @@ namespace LocalTaikoAgent.Plugin
             int time,
             int key,
             bool isDown,
+            int downTime,
             int sourceLine,
             int referenceTime,
             LiveTaikoObjectKind kind,
@@ -66,6 +67,7 @@ namespace LocalTaikoAgent.Plugin
             Time = time;
             Key = key;
             IsDown = isDown;
+            DownTime = downTime;
             SourceLine = sourceLine;
             ReferenceTime = referenceTime;
             Kind = kind;
@@ -75,6 +77,7 @@ namespace LocalTaikoAgent.Plugin
         public readonly int Time;
         public readonly int Key;
         public readonly bool IsDown;
+        public readonly int DownTime;
         public readonly int SourceLine;
         public readonly int ReferenceTime;
         public readonly LiveTaikoObjectKind Kind;
@@ -202,12 +205,12 @@ namespace LocalTaikoAgent.Plugin
             public bool RequiredForCombo;
         }
 
-        public static LiveTaikoPlan ParseAndBuild(string path, int tapMilliseconds, int selectedMods)
+        public static LiveTaikoPlan ParseAndBuild(string path, int mapTapMilliseconds, int selectedMods)
         {
             if (String.IsNullOrEmpty(path) || !File.Exists(path))
                 throw new FileNotFoundException("Current beatmap .osu file was not found.", path);
-            if (tapMilliseconds < 1 || tapMilliseconds > 100)
-                throw new ArgumentOutOfRangeException("tapMilliseconds");
+            if (mapTapMilliseconds < 1 || mapTapMilliseconds > 150)
+                throw new ArgumentOutOfRangeException("mapTapMilliseconds");
 
             int formatVersion = -1;
             int mode = -1;
@@ -343,7 +346,15 @@ namespace LocalTaikoAgent.Plugin
             }
 
             List<string> warnings = new List<string>();
-            List<LiveTaikoTransitionBatch> batches = BuildBatches(strikes, tapMilliseconds, warnings);
+            strikes = ProtectComboCirclesFromDrumRollStrikes(
+                strikes,
+                overallDifficulty,
+                selectedMods,
+                warnings);
+            List<LiveTaikoTransitionBatch> batches = BuildBatches(
+                strikes,
+                mapTapMilliseconds,
+                warnings);
             if (batches.Count == 0)
                 throw new InvalidDataException(path + ": no live input transitions were generated.");
             return new LiveTaikoPlan(
@@ -364,10 +375,19 @@ namespace LocalTaikoAgent.Plugin
         public static LiveTaikoPlan Rebuild(
             LiveTaikoPlan source,
             List<LiveTaikoStrike> strikes,
-            int tapMilliseconds)
+            int mapTapMilliseconds,
+            int selectedMods)
         {
             List<string> warnings = new List<string>(source.Warnings);
-            List<LiveTaikoTransitionBatch> batches = BuildBatches(strikes, tapMilliseconds, warnings);
+            List<LiveTaikoStrike> protectedStrikes = ProtectComboCirclesFromDrumRollStrikes(
+                strikes,
+                source.OverallDifficulty,
+                selectedMods,
+                warnings);
+            List<LiveTaikoTransitionBatch> batches = BuildBatches(
+                protectedStrikes,
+                mapTapMilliseconds,
+                warnings);
             return new LiveTaikoPlan(
                 source.Path,
                 source.FormatVersion,
@@ -378,7 +398,7 @@ namespace LocalTaikoAgent.Plugin
                 source.SpinnerCount,
                 batches[0].Time,
                 batches[batches.Count - 1].Time,
-                strikes,
+                protectedStrikes,
                 batches,
                 warnings);
         }
@@ -628,11 +648,7 @@ namespace LocalTaikoAgent.Plugin
             double overallDifficulty,
             int selectedMods)
         {
-            double difficulty = overallDifficulty;
-            if ((selectedMods & EasyBit) != 0)
-                difficulty = Math.Max(0.0, difficulty / 2.0);
-            if ((selectedMods & HardRockBit) != 0)
-                difficulty = Math.Min(10.0, difficulty * 1.4);
+            double difficulty = ModifiedOverallDifficulty(overallDifficulty, selectedMods);
             double rate = DifficultyRange(difficulty, 3.0, 5.0, 7.5);
             int baseRequired = (int)(((float)durationMilliseconds / 1000f) * rate);
             int required = (int)Math.Max(1f, baseRequired * 1.65f);
@@ -641,6 +657,134 @@ namespace LocalTaikoAgent.Plugin
             if ((selectedMods & HalfTimeBit) != 0)
                 required = Math.Max(1, (int)(required * 1.5f));
             return required;
+        }
+
+        internal static int CalculateCirclePressAcceptanceWindow(
+            double overallDifficulty,
+            int selectedMods)
+        {
+            double difficulty = ModifiedOverallDifficulty(overallDifficulty, selectedMods);
+            return Math.Max(1, (int)DifficultyRange(difficulty, 200.0, 150.0, 100.0));
+        }
+
+        private static List<LiveTaikoStrike> ProtectComboCirclesFromDrumRollStrikes(
+            List<LiveTaikoStrike> strikes,
+            double overallDifficulty,
+            int selectedMods,
+            List<string> warnings)
+        {
+            List<LiveTaikoStrike> circles = strikes.FindAll(delegate(LiveTaikoStrike strike)
+            {
+                return strike.RequiredForCombo;
+            });
+            if (circles.Count == 0)
+                return strikes;
+            circles.Sort(delegate(LiveTaikoStrike left, LiveTaikoStrike right)
+            {
+                int byReference = left.ReferenceTime.CompareTo(right.ReferenceTime);
+                return byReference != 0 ? byReference : left.SourceLine.CompareTo(right.SourceLine);
+            });
+
+            int acceptance = CalculateCirclePressAcceptanceWindow(
+                overallDifficulty,
+                selectedMods);
+            int suppressedRolls = 0;
+            List<LiveTaikoStrike> result = new List<LiveTaikoStrike>(strikes.Count);
+            for (int strikeIndex = 0; strikeIndex < strikes.Count; strikeIndex++)
+            {
+                LiveTaikoStrike strike = strikes[strikeIndex];
+                if (strike.RequiredForCombo
+                    || strike.Kind != LiveTaikoObjectKind.DrumRoll
+                    || !CanReachUnresolvedCircle(strike, circles, acceptance))
+                {
+                    result.Add(strike);
+                    continue;
+                }
+
+                suppressedRolls++;
+            }
+
+            if (suppressedRolls > 0)
+            {
+                warnings.Add("suppressed " + suppressedRolls
+                    + " drumroll strikes inside the " + acceptance
+                    + "ms Taiko circle press-acceptance guard");
+            }
+            return result;
+        }
+
+        private static bool CanReachUnresolvedCircle(
+            LiveTaikoStrike bonus,
+            List<LiveTaikoStrike> circles,
+            int acceptance)
+        {
+            int minimumReference = checked(bonus.Time - acceptance);
+            int maximumReference = checked(bonus.Time + acceptance);
+            int first = LowerBoundCircleReference(circles, minimumReference);
+            for (int index = first; index < circles.Count; index++)
+            {
+                LiveTaikoStrike circle = circles[index];
+                if (circle.ReferenceTime > maximumReference)
+                    break;
+                if (Math.Abs((long)bonus.Time - circle.ReferenceTime) > acceptance)
+                    continue;
+
+                int lastCircleDown = circle.Time;
+                for (int keyIndex = 0; keyIndex < circle.KeyDelays.Length; keyIndex++)
+                    lastCircleDown = Math.Max(lastCircleDown,
+                        checked(circle.Time + circle.KeyDelays[keyIndex]));
+                if (bonus.Time > lastCircleDown)
+                    continue;
+                if (IsExactSameKeyCollision(bonus, circle))
+                    continue;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool IsExactSameKeyCollision(
+            LiveTaikoStrike bonus,
+            LiveTaikoStrike circle)
+        {
+            if (bonus.Keys.Length != 1 || bonus.KeyDelays.Length != 1)
+                return false;
+            int bonusDown = checked(bonus.Time + bonus.KeyDelays[0]);
+            for (int index = 0; index < circle.Keys.Length; index++)
+            {
+                int circleDown = checked(circle.Time + circle.KeyDelays[index]);
+                if (bonusDown == circleDown && bonus.Keys[0] == circle.Keys[index])
+                    return true;
+            }
+            return false;
+        }
+
+        private static int LowerBoundCircleReference(
+            List<LiveTaikoStrike> circles,
+            int referenceTime)
+        {
+            int low = 0;
+            int high = circles.Count;
+            while (low < high)
+            {
+                int middle = low + (high - low) / 2;
+                if (circles[middle].ReferenceTime < referenceTime)
+                    low = middle + 1;
+                else
+                    high = middle;
+            }
+            return low;
+        }
+
+        private static double ModifiedOverallDifficulty(
+            double overallDifficulty,
+            int selectedMods)
+        {
+            double difficulty = overallDifficulty;
+            if ((selectedMods & EasyBit) != 0)
+                difficulty = Math.Max(0.0, difficulty / 2.0);
+            if ((selectedMods & HardRockBit) != 0)
+                difficulty = Math.Min(10.0, difficulty * 1.4);
+            return difficulty;
         }
 
         private static LiveTaikoStrike CreateStrike(
@@ -670,7 +814,7 @@ namespace LocalTaikoAgent.Plugin
 
         private static List<LiveTaikoTransitionBatch> BuildBatches(
             List<LiveTaikoStrike> strikes,
-            int tapMilliseconds,
+            int mapTapMilliseconds,
             List<string> warnings)
         {
             List<DownEvent>[] byKey = new List<DownEvent>[4];
@@ -726,7 +870,7 @@ namespace LocalTaikoAgent.Plugin
                 for (int index = 0; index < byKey[key].Count; index++)
                 {
                     DownEvent down = byKey[key][index];
-                    int release = checked(down.Time + tapMilliseconds);
+                    int release = checked(down.Time + mapTapMilliseconds);
                     if (index + 1 < byKey[key].Count && byKey[key][index + 1].Time <= release)
                         release = byKey[key][index + 1].Time - 1;
                     release = Math.Max(down.Time + 1, release);
@@ -734,6 +878,7 @@ namespace LocalTaikoAgent.Plugin
                         down.Time,
                         key,
                         true,
+                        down.Time,
                         down.SourceLine,
                         down.ReferenceTime,
                         down.Kind,
@@ -742,6 +887,7 @@ namespace LocalTaikoAgent.Plugin
                         release,
                         key,
                         false,
+                        down.Time,
                         down.SourceLine,
                         down.ReferenceTime,
                         down.Kind,

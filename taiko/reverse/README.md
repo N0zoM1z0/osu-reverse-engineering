@@ -80,6 +80,8 @@ flowchart TD
 - [Native Taiko beatmap structure](analysis/beatmap-format.md)
 - [Auto, Player input, and runtime objects](analysis/runtime-paths.md)
 - [Judgement mathematics and the live agent](analysis/judgement-and-agent.md)
+- [Physical input sampling under DT](analysis/input-sampling-and-clock-rate.md)
+- [Drumroll arbitration near Taiko circles](analysis/drumroll-circle-arbitration.md)
 - [Score validity, submission gates, and read-only diagnostics](analysis/submission-path.md)
 
 The local `notes/` directory is ignored. It is intended for raw session notes, logs, screenshots,

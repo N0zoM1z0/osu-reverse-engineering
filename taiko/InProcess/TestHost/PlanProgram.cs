@@ -14,12 +14,18 @@ internal static class PlanProgram
                 return 2;
             }
 
-            LiveTaikoPlan source = LivePlanBuilder.ParseAndBuild(args[0], 8, 0);
+            VerifyInputTimingPolicy();
+            int mapTapMilliseconds = InputTimingPolicy.ToMapPulseMilliseconds(
+                InputTimingPolicy.DefaultPhysicalTapMilliseconds,
+                0);
+            LiveTaikoPlan source = LivePlanBuilder.ParseAndBuild(args[0], mapTapMilliseconds, 0);
             Assert(source.ObjectCount == 6, "object count");
             Assert(source.CircleCount == 4, "circle count");
             Assert(source.DrumRollCount == 1, "drumroll count");
             Assert(source.SpinnerCount == 1, "spinner count");
             Assert(source.Strikes.Count == 21, "native strike count");
+            Assert(LivePlanBuilder.ParseAndBuild(args[0], 150, 0x40).Batches.Count > 0,
+                "maximum rate-adjusted pulse accepted");
 
             List<LiveTaikoStrike> circles = source.Strikes.FindAll(delegate(LiveTaikoStrike strike)
             {
@@ -54,14 +60,22 @@ internal static class PlanProgram
                 false,
                 0,
                 true);
-            HumanizedPlanResult result = Humanizer.Apply(source, clean, 0, 8, 12345);
+            HumanizedPlanResult result = Humanizer.Apply(
+                source,
+                clean,
+                0,
+                mapTapMilliseconds,
+                12345);
             Assert(result.Miss == 0, "clean humanizer misses");
             Assert(result.Grade100 == 0, "clean humanizer 100s");
             Assert(result.Grade300 == 4, "clean humanizer 300s");
             Assert(result.Plan.Batches.Count > 0, "transition batches");
             Assert(Math.Abs(LivePlanBuilder.CalculateDrumRollInterval(7, 1.5, 600.0, 2.0) - 75.0)
                 < 0.0001, "legacy v7 drumroll cadence");
+            Assert(LivePlanBuilder.CalculateCirclePressAcceptanceWindow(6.0, 0x10) == 116,
+                "HR circle press-acceptance window");
             VerifyComboMetadataWinsExactInputCollision();
+            VerifyBonusStrikesYieldToUpcomingCircles();
 
             Console.WriteLine("TAIKO IN-PROCESS PLAN TEST: PASS");
             Console.WriteLine("objects=" + source.ObjectCount
@@ -81,6 +95,24 @@ internal static class PlanProgram
     {
         if (!condition)
             throw new InvalidOperationException("assertion failed: " + label);
+    }
+
+    private static void VerifyInputTimingPolicy()
+    {
+        int physical = InputTimingPolicy.DefaultPhysicalTapMilliseconds;
+        Assert(physical == 30, "default physical pulse");
+        Assert(InputTimingPolicy.ToMapPulseMilliseconds(physical, 0) == 30,
+            "normal map pulse");
+        Assert(InputTimingPolicy.ToMapPulseMilliseconds(physical, 0x40) == 45,
+            "DT map pulse");
+        Assert(InputTimingPolicy.ToMapPulseMilliseconds(physical, 0x100) == 23,
+            "HT map pulse");
+        Assert(InputTimingPolicy.ToMapPulseMilliseconds(100, 0x40) == 150,
+            "maximum DT map pulse");
+        Assert(InputTimingPolicy.LateSamplingGuardMilliseconds(physical, 45, 1.5) == 20,
+            "late DT sampling guard");
+        Assert(InputTimingPolicy.LateSamplingGuardMilliseconds(physical, 9, 1.5) == 6,
+            "dense clipped pulse guard");
     }
 
     private static void VerifyComboMetadataWinsExactInputCollision()
@@ -127,14 +159,88 @@ internal static class PlanProgram
             strikes,
             new List<LiveTaikoTransitionBatch>(),
             new List<string>());
-        LiveTaikoPlan rebuilt = LivePlanBuilder.Rebuild(source, strikes, 8);
+        LiveTaikoPlan rebuilt = LivePlanBuilder.Rebuild(source, strikes, 30, 0);
         LiveTaikoTransition down = rebuilt.Batches[0].Transitions[0];
         Assert(down.Time == 1000 && down.IsDown, "coalesced transition identity");
+        Assert(down.DownTime == 1000, "coalesced transition pulse origin");
         Assert(down.RequiredForCombo, "combo metadata wins bonus collision");
         Assert(down.Kind == LiveTaikoObjectKind.Circle && down.SourceLine == 11,
             "combo source metadata retained");
         Assert(rebuilt.Warnings.Count == 1
             && rebuilt.Warnings[0].IndexOf("combo-relevant metadata retained", StringComparison.Ordinal) >= 0,
             "collision warning");
+    }
+
+    private static void VerifyBonusStrikesYieldToUpcomingCircles()
+    {
+        List<LiveTaikoStrike> strikes = new List<LiveTaikoStrike>
+        {
+            Bonus(800, 700, 950, 20, LiveTaikoObjectKind.DrumRoll),
+            Bonus(900, 700, 950, 20, LiveTaikoObjectKind.DrumRoll),
+            Bonus(949, 700, 950, 20, LiveTaikoObjectKind.DrumRoll),
+            new LiveTaikoStrike
+            {
+                Time = 1000,
+                ReferenceTime = 1000,
+                ObjectStart = 1000,
+                ObjectEnd = 1000,
+                SourceLine = 21,
+                Kind = LiveTaikoObjectKind.Circle,
+                RequiredForCombo = true,
+                IsStrong = false,
+                Keys = new int[] { (int)LiveTaikoKey.OuterLeft },
+                KeyDelays = new int[] { 0 }
+            },
+            Bonus(1050, 700, 1100, 20, LiveTaikoObjectKind.DrumRoll)
+        };
+        LiveTaikoPlan source = new LiveTaikoPlan(
+            "synthetic-bonus-guard.osu",
+            14,
+            5.0,
+            2,
+            1,
+            1,
+            0,
+            700,
+            1100,
+            strikes,
+            new List<LiveTaikoTransitionBatch>(),
+            new List<string>());
+        LiveTaikoPlan rebuilt = LivePlanBuilder.Rebuild(source, strikes, 30, 0);
+        Assert(rebuilt.Strikes.Count == 3, "unsafe bonus strikes suppressed");
+        Assert(rebuilt.Strikes.Exists(delegate(LiveTaikoStrike strike)
+        {
+            return !strike.RequiredForCombo && strike.Time == 800;
+        }), "distant roll strike retained");
+        Assert(rebuilt.Strikes.Exists(delegate(LiveTaikoStrike strike)
+        {
+            return !strike.RequiredForCombo && strike.Time == 1050;
+        }), "post-judgement roll strike retained");
+        Assert(rebuilt.Warnings.Exists(delegate(string warning)
+        {
+            return warning.IndexOf("suppressed 2 drumroll strikes", StringComparison.Ordinal) >= 0;
+        }), "bonus guard warning");
+    }
+
+    private static LiveTaikoStrike Bonus(
+        int time,
+        int objectStart,
+        int objectEnd,
+        int sourceLine,
+        LiveTaikoObjectKind kind)
+    {
+        return new LiveTaikoStrike
+        {
+            Time = time,
+            ReferenceTime = time,
+            ObjectStart = objectStart,
+            ObjectEnd = objectEnd,
+            SourceLine = sourceLine,
+            Kind = kind,
+            RequiredForCombo = false,
+            IsStrong = false,
+            Keys = new int[] { (int)LiveTaikoKey.InnerLeft },
+            KeyDelays = new int[] { 0 }
+        };
     }
 }
