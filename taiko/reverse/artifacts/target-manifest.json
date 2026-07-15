@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "target": {
+    "fileName": "osu!.exe",
+    "productVersion": "1.3.3.8",
+    "assemblyVersion": "0.0.0.0",
+    "architecture": "x86",
+    "md5": "0beb5a2f026f5a579c2046ab73fece16",
+    "sha256": "6e182c10d1813209d12753dbc70b3a5bba00fef4ecf64bc42051870e6dfe4b7d"
+  },
+  "ida": {
+    "imageBase": "0x00400000",
+    "managedAddressNote": "IDA's managed IL addresses are synthetic method ranges, not PE metadata RVAs."
+  },
+  "methods": [
+    {
+      "label": "taiko-auto-generator",
+      "semanticName": "Taiko_Auto_GenerateReplayFrames",
+      "token": "0x06001ef7",
+      "idaAddress": "0x000c24b0",
+      "idaSize": "0x380",
+      "ilBytes": 896,
+      "ilSha256": "27ed89e06ad791076527452accda97caa8aeff80709cdb188502baf6eefc38cb"
+    },
+    {
+      "label": "player-input-recorder",
+      "semanticName": "Player_RecordInputStateChange",
+      "token": "0x0600229b",
+      "idaAddress": "0x000e1480",
+      "idaSize": "0x1db",
+      "ilBytes": 475,
+      "ilSha256": "3c79f4c445392b41ae414f3795b5aba8804e66b1cf2e8defe60f66288841b4a5"
+    },
+    {
+      "label": "four-button-state-packer",
+      "semanticName": "Input_PackFourButtonState",
+      "token": "0x060011af",
+      "idaAddress": "0x0006e900",
+      "idaSize": "0x29",
+      "ilBytes": 41,
+      "ilSha256": "fd53812b5d69ef7cc14ffdb7ea31e97c1a541986bfd9e0872d353a676e3afe50"
+    },
+    {
+      "label": "binding-initializer",
+      "semanticName": "Input_InitializeDefaultBindings",
+      "token": "0x06002c55",
+      "idaAddress": "0x00128d10",
+      "idaSize": "0x316",
+      "ilBytes": 790,
+      "ilSha256": "3ab15bd4570abcc04d7f6cc077148acc30f4e1c0e09be0087878ea9008c48540"
+    },
+    {
+      "label": "taiko-circle-accepts-press",
+      "semanticName": "TaikoCircle_AcceptsNewPress",
+      "token": "0x060020e8",
+      "idaAddress": "0x000d1c10",
+      "idaSize": "0x1ae",
+      "ilBytes": 430,
+      "ilSha256": "3984ef883e6ffc6c101fa16d21cb0b3237cdf05f2c628f88d62d4a018af9402c"
+    },
+    {
+      "label": "taiko-circle-resolve-judgement",
+      "semanticName": "TaikoCircle_ResolveJudgement",
+      "token": "0x060020eb",
+      "idaAddress": "0x000d1df0",
+      "idaSize": "0x2b0",
+      "ilBytes": 688,
+      "ilSha256": "3d7d99065011747decf03d4ec6529755a3fa9eb15c7e30d53c8b4b4f7a4bf07c"
+    },
+    {
+      "label": "difficulty-range",
+      "semanticName": "Gameplay_DifficultyRange",
+      "token": "0x060028b3",
+      "idaAddress": "0x0010b7d0",
+      "idaSize": "0x6f",
+      "ilBytes": 111,
+      "ilSha256": "2c52153e96113422f3ef2e796a047f9c307d1c51ed81d0508e06b16dd5bcdd1b"
+    },
+    {
+      "label": "taiko-drumroll-native-interval",
+      "semanticName": "TaikoDrumRoll_GetNativeTickInterval",
+      "token": "0x06004257",
+      "idaAddress": "0x001ad7a0",
+      "idaSize": "0x178",
+      "ilBytes": 376,
+      "ilSha256": "9bbab29be6f948d0d7c6d998147df8e1e61940c8cd9aa58e6b21d0383a2a394f"
+    },
+    {
+      "label": "taiko-spinner-constructor",
+      "semanticName": "TaikoSpinner_InitializeRequiredHits",
+      "token": "0x06001d6d",
+      "idaAddress": "0x000b8930",
+      "idaSize": "0x1a2",
+      "ilBytes": 418,
+      "ilSha256": "9013079db21b3c6debee252c74d0b98b0de7b5236d7c7bdfeeaf69e6b4415743"
+    }
+  ]
+}

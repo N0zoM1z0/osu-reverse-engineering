@@ -19,6 +19,8 @@ LocalManiaAuto/
 # User-owned game content must never enter the repository
 *.osu
 !mania/ManiaAuto/TestData/minimal-4k.osu
+!taiko/TaikoBeatmap/TestData/minimal-taiko.osu
+!catch/CatchPlanner/TestData/minimal-catch.osu
 *.osr
 *.osz
 osu!.exe
@@ -27,14 +29,33 @@ osu!*.dll
 # Full decompiler output and private research sessions stay local
 mania/reverse/decompiled/
 mania/reverse/notes/
+taiko/reverse/decompiled/
+taiko/reverse/notes/
+catch/reverse/decompiled/
+catch/reverse/notes/
+catch/experiments/
 
-# Publish only the two core binaries built from this repository
+# Publish only each module's core loader/plugin binaries and checksums
 mania/artifacts/**
 !mania/artifacts/inprocess/
 !mania/artifacts/inprocess/net40/
 !mania/artifacts/inprocess/net40/LocalManiaAuto.Loader.dll
 !mania/artifacts/inprocess/net40/LocalManiaAuto.Plugin.dll
 !mania/artifacts/inprocess/net40/SHA256SUMS
+
+taiko/artifacts/**
+!taiko/artifacts/inprocess/
+!taiko/artifacts/inprocess/net40/
+!taiko/artifacts/inprocess/net40/LocalTaikoAgent.Loader.dll
+!taiko/artifacts/inprocess/net40/LocalTaikoAgent.Plugin.dll
+!taiko/artifacts/inprocess/net40/SHA256SUMS
+
+catch/artifacts/**
+!catch/artifacts/inprocess/
+!catch/artifacts/inprocess/net40/
+!catch/artifacts/inprocess/net40/LocalCatchAgent.Loader.dll
+!catch/artifacts/inprocess/net40/LocalCatchAgent.Plugin.dll
+!catch/artifacts/inprocess/net40/SHA256SUMS
 
 # Local extraction and scratch output
 out/
