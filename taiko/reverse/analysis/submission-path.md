@@ -16,6 +16,11 @@ This is diagnostic research, not an anti-cheat bypass. The observer described be
 three scalar values. It does not call the submission entry point, modify a score, retrieve or log
 an account value or credential, redirect traffic, or suppress client/server checks.
 
+For the wider architecture around these gates—including executable trust, protected code,
+multi-clock consistency, integrity-signal serialization, rendering/window checks, process
+observation, and the VM/server boundary—see
+[Client integrity and anti-cheat architecture](../../../reverse/analysis/client-integrity-and-anti-cheat.md).
+
 ## 1. Four independent layers
 
 "The score was not uploaded" can describe failures at four different layers:
