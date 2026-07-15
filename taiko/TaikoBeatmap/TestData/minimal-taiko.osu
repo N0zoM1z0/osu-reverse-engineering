@@ -1,0 +1,30 @@
+osu file format v14
+
+[General]
+AudioFilename: synthetic.mp3
+Mode: 1
+
+[Metadata]
+Title:Synthetic Drum Check
+Artist:Local Research
+Creator:Codex
+Version:Parser Test
+
+[Difficulty]
+HPDrainRate:5
+CircleSize:2
+OverallDifficulty:5
+ApproachRate:5
+SliderMultiplier:1.4
+SliderTickRate:1
+
+[TimingPoints]
+0,500,4,1,0,100,1,0
+
+[HitObjects]
+256,192,1000,1,0,0:0:0:0:
+256,192,1500,1,2,0:0:0:0:
+256,192,2000,1,4,0:0:0:0:
+256,192,2250,1,12,0:0:0:0:
+256,192,2500,2,0,B|356:192,1,140
+256,192,3250,8,0,4000,0:0:0:0:
